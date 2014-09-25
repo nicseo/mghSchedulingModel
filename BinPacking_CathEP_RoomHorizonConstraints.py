@@ -1,5 +1,6 @@
 """
 Created on Thursday, September 18, 2014
+Modified on 9/25
 
 @author: nicseo
 
