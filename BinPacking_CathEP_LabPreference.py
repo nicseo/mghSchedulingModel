@@ -54,13 +54,15 @@ class TimePeriod:
 
     User methods:
         packBins(procedures)
-
-    Helper methods (not to be explicitly called outside of class):
+        
+    Observer methods:
         sumProcTimes(dataList)
         getTotalMinutesInLabForDay(day,lab)
+        getTotalMinutesInLabForWeek(week,lab) 
+
+    Helper methods (not to be explicitly called outside of class):
         tryPlaceProcInLabDay(procedure,lab,day,nextOpenRoom,openRooms)
         packBinsForDay(day,daysProcedures)
-        getTotalMinutesInLabForWeek(week,lab)
         tryPlaceProcInLabWeek(procedure,lab,week,nextOpenRoom,openRooms)
         packBinsForWeek(week,weeksProcedures)
         
@@ -358,7 +360,7 @@ class TimePeriod:
 
     def packBinsForWeek(self,week,weeksProcedures):
         '''
-        Schedules procedures during a given day, if possible. Keeps track of overflow procedures
+        Schedules procedures during a given week, if possible. Keeps track of overflow procedures
         (that couldn't be scheduled in that week).
         
         Input: week (integer week of time period to be scheduled, indexed from 0)
@@ -368,6 +370,7 @@ class TimePeriod:
         
         weeksRooms = self.weekBins[week]
         # procedures that couldn't be placed in the entire week will be shown in the first day's (Monday's) overflow list
+        # Here 0 is the first day of the week and 2 refers to overflow, i.e. 0-cath, 1-EP, 2-overflow
         procsNotPlaced = weeksRooms[0][2]
 
         # divides all procedures into inflexible ones (EP only, Cath only) and flexible ones (either lab)
@@ -450,16 +453,23 @@ class TimePeriod:
                         
                 # openings in either lab
                 else:
-                    if (self.getTotalMinutesInLabForWeek(week,'Cath')/(totalTimeRoom*self.numCathRooms*5)) <= (self.getTotalMinutesInLabForWeek(week,'EP')/(totalTimeRoom*self.numEPRooms*5)):
+                    if originalLab=='Cath':
                         procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms)
-                        if procPlaced and originalLab=='EP':
-                            self.crossOverProcs += 1
-                            self.epToCath += 1
-                    else:
+                    elif originalLab=='EP':                        
                         procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
-                        if procPlaced and originalLab=='Cath':
-                            self.crossOverProcs += 1
-                            self.cathToEP += 1
+                        
+                        
+#                else:
+#                    if (self.getTotalMinutesInLabForWeek(week,'Cath')/(totalTimeRoom*self.numCathRooms*5)) <= (self.getTotalMinutesInLabForWeek(week,'EP')/(totalTimeRoom*self.numEPRooms*5)):
+#                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms)
+#                        if procPlaced and originalLab=='EP':
+#                            self.crossOverProcs += 1
+#                            self.epToCath += 1
+#                    else:
+#                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
+#                        if procPlaced and originalLab=='Cath':
+#                            self.crossOverProcs += 1
+#                            self.cathToEP += 1
 
                                                            
 
@@ -666,10 +676,11 @@ if __name__ == "__main__":
 
     ###### information regarding the name/location of the data file ######
     
-    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+#    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
     # uncomment the data set to analyze or add a new one
-    #fileName= 'CathAndEP_PT_SchedHorizon.csv'
-    fileName= 'Volumes1.csv'
+    fileName= 'CathAndEP_PT_SchedHorizon.csv'
+    #fileName= 'Volumes1.csv'
     #fileName= 'Volumes2.csv'
 
     ###### information regarding the name/location of the output data ######
