@@ -68,11 +68,11 @@ class TimePeriod:
         
     '''
     
-
     def __init__(self,days,numCathRooms,numEPRooms):
 
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
+        recoveryBay = {i:[] for i in xrange(48)}
         procsNotPlaced = []
 
         self.dayBins = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms),copy.deepcopy(procsNotPlaced)] for i in xrange(days)]
@@ -111,24 +111,24 @@ class TimePeriod:
         print "Same day/emergencies: "+str(len(emergencies)+len(sameDay))
         print "Same weeks: "+str(len(sameWeek))
         
-        
-        # schedule emergencies and same day procedures first, day by day
-        for d in range(1,timePeriod.numDays+1):
-            #print "Packing bins for day: "+str(d)
-            
-            daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
-            #print "On day "+str(d)+" there were "+str(len(daysEmergencies))+" emergency procedures"
-            self.packBinsForDay(d-1,daysEmergencies)
-
-            daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
-            #print "On day "+str(d)+" there were "+str(len(daysSameDays))+" same day procedures"
-            self.packBinsForDay(d-1,daysSameDays)
-
         # schedule same week procedures next, week by week
         for w in range(1,timePeriod.numWeeks+1):
 
             weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w]
+            weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
             self.packBinsForWeek(w-1,weeksProcs)
+
+        
+        # schedule emergencies and same day procedures first, day by day
+        for d in range(1,timePeriod.numDays+1):
+
+            daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
+            daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+            self.packBinsForDay(d-1,daysSameDays)
+            
+            daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
+            daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+            self.packBinsForDay(d-1,daysEmergencies)
 
         print "Total of "+str(self.procsPlaced)+" procedures placed"
             
@@ -142,6 +142,29 @@ class TimePeriod:
         timeDataOnly = [dataList[i][iProcTime] for i in range(len(dataList))]
         
         return sum(timeDataOnly)
+
+    def getUtilizationForDays(self):
+        '''
+        '''
+        CathRooms = {i:[] for i in xrange(numCathRooms)}
+        EPRooms = {i:[] for i in xrange(numEPRooms)}
+        daysUtil = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms)] for i in xrange(daysInPeriod)]
+
+        for day in xrange(len(timePeriod.dayBins)):
+            daysBins = timePeriod.dayBins[day]
+            cathRoom = daysBins[0]
+            epRoom = daysBins[1]
+            
+            for c in range(numCathRooms):
+                totalMin = timePeriod.sumProcTimes(cathRoom[c])
+                util = totalMin / totalTimeRoom
+                daysUtil[day][0][c] = util
+            for e in range(numEPRooms):
+                totalMin = timePeriod.sumProcTimes(epRoom[e])
+                util = totalMin / totalTimeRoom
+                daysUtil[day][1][e] = util
+                
+        return daysUtil
 
     ##################################### DAY BY DAY PACKING #####################################
     ################################### EMERGENCIES/SAME DAYS ####################################
@@ -275,6 +298,9 @@ class TimePeriod:
                     if procPlaced and originalLab=='EP':
                         self.crossOverProcs += 1
                         self.epToCath += 1
+##                        print "Procedure cross over EP to Cath: "+str(procedure)
+##                        print "Day: "+str(day)
+##                        print "EP schedule that day: "+str(self.dayBins[day][1])
 
                 # no openings in Cath
                 elif (nextOpenCath == -1):
@@ -285,19 +311,11 @@ class TimePeriod:
                         
                 # openings in either lab
                 else:
-                    if (self.getTotalMinutesInLabForDay(day,'Cath')/(totalTimeRoom*self.numCathRooms)) <= (self.getTotalMinutesInLabForDay(day,'EP')/(totalTimeRoom*self.numEPRooms)):
+                    if originalLab=='Cath':
                         procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms)
-                        if procPlaced and originalLab=='EP':
-                            self.crossOverProcs += 1
-                            self.epToCath += 1
-                    else:
+                    elif originalLab=='EP':                        
                         procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms)
-                        if procPlaced and originalLab=='Cath':
-                            self.crossOverProcs += 1
-                            self.cathToEP += 1
-
-
-                        
+                                
 
     ##################################### WEEK BY WEEK PACKING #####################################
     ################################### SAME WEEK PROCEDURES ONLY ##################################
@@ -443,6 +461,8 @@ class TimePeriod:
                     if procPlaced and originalLab=='EP':
                         self.crossOverProcs += 1
                         self.epToCath += 1
+##                        print "Procedure cross over EP to Cath: "+str(procedure)
+##                        print "Week: "+str(week)
 
                 # no openings in Cath
                 elif (nextOpenCath == -1):
@@ -458,22 +478,6 @@ class TimePeriod:
                     elif originalLab=='EP':                        
                         procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
                         
-                        
-#                else:
-#                    if (self.getTotalMinutesInLabForWeek(week,'Cath')/(totalTimeRoom*self.numCathRooms*5)) <= (self.getTotalMinutesInLabForWeek(week,'EP')/(totalTimeRoom*self.numEPRooms*5)):
-#                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms)
-#                        if procPlaced and originalLab=='EP':
-#                            self.crossOverProcs += 1
-#                            self.epToCath += 1
-#                    else:
-#                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
-#                        if procPlaced and originalLab=='Cath':
-#                            self.crossOverProcs += 1
-#                            self.cathToEP += 1
-
-                                                           
-
-
 
 
 ######################################################################################################
@@ -658,7 +662,7 @@ if __name__ == "__main__":
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 3              # number of EP rooms available per day
+    numEPRooms = 4              # number of EP rooms available per day
 
     ###### information regarding the order of information in the data sheet ######
     numEntries = 6              # number of columns in data sheet
@@ -676,8 +680,8 @@ if __name__ == "__main__":
 
     ###### information regarding the name/location of the data file ######
     
-#    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
+    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
     # uncomment the data set to analyze or add a new one
     fileName= 'CathAndEP_PT_SchedHorizon.csv'
     #fileName= 'Volumes1.csv'
@@ -703,6 +707,11 @@ if __name__ == "__main__":
     timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms)   # time period model
     timePeriod.packBins(procedures)                                 # schedule all procedures from data file
 
+    print "Cath rooms: "+str(numCathRooms)
+    print "EP rooms: "+str(numEPRooms)
+
+    
+    
     overflowWeeks = 0
     for week in timePeriod.weekBins:
         day = week[0]
