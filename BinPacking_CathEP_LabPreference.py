@@ -8,6 +8,7 @@ This script models efficient scheduling of prime time procedures in both Cath an
 on data taken over a 125 day (25 week) period. The constraints of the model are:
     1. Room location (where the procedure must be done)
     2. Scheduling horizon (the time period during which the procedure must be scheduled)
+    3. Crossover policy (whether or not procedures are allowed to crossover between lab rooms)
 
 Notes about use:
 - You must have openpyxl package installed to run this script.
@@ -92,15 +93,22 @@ class TimePeriod:
     ##################################### BIN PACKING FOR #####################################
     #################################### WHOLE TIME PERIOD ####################################
 
-    def packBins(self,procedures):
+    def packBins(self,procedures,algType):
         '''
         Schedules procedures into the time period.
         
         Input: procedures (a list of cleaned procedure data for a given period of time)
+                algType (a string describing the type of scheduling algorithm to run)
         Returns: none
         '''
 
         allProcs = procedures[:]
+
+        if algType == "NoCrossovers":
+            
+            # change all the procedure rooms to the original lab only
+            for proc in allProcs:
+                proc[iRoom] = proc[iLab]
 
         # break procedures up by scheduling horizon
         emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
@@ -110,6 +118,8 @@ class TimePeriod:
         print "Total procedures after break up: "+str(len(emergencies)+len(sameDay)+len(sameWeek))
         print "Same day/emergencies: "+str(len(emergencies)+len(sameDay))
         print "Same weeks: "+str(len(sameWeek))
+        #self.getProcsByMinuteVolume(allProcs)
+        
         
         # schedule same week procedures next, week by week
         for w in range(1,timePeriod.numWeeks+1):
@@ -121,7 +131,7 @@ class TimePeriod:
         
         # schedule emergencies and same day procedures first, day by day
         for d in range(1,timePeriod.numDays+1):
-
+            
             daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
             daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
             self.packBinsForDay(d-1,daysSameDays)
@@ -129,8 +139,6 @@ class TimePeriod:
             daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
             daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
             self.packBinsForDay(d-1,daysEmergencies)
-
-        print "Total of "+str(self.procsPlaced)+" procedures placed"
             
 
     def sumProcTimes(self,dataList):
@@ -143,28 +151,104 @@ class TimePeriod:
         
         return sum(timeDataOnly)
 
-    def getUtilizationForDays(self):
+    def getUtilizationStatistics(self):
         '''
         '''
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
-        daysUtil = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms)] for i in xrange(daysInPeriod)]
+        daysUtil = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms)] for i in xrange(len(self.dayBins))]
 
-        for day in xrange(len(timePeriod.dayBins)):
-            daysBins = timePeriod.dayBins[day]
+        for day in xrange(len(self.dayBins)):
+            daysBins = self.dayBins[day]
             cathRoom = daysBins[0]
             epRoom = daysBins[1]
             
             for c in range(numCathRooms):
-                totalMin = timePeriod.sumProcTimes(cathRoom[c])
+                totalMin = self.sumProcTimes(cathRoom[c])
                 util = totalMin / totalTimeRoom
                 daysUtil[day][0][c] = util
             for e in range(numEPRooms):
-                totalMin = timePeriod.sumProcTimes(epRoom[e])
+                totalMin = self.sumProcTimes(epRoom[e])
                 util = totalMin / totalTimeRoom
                 daysUtil[day][1][e] = util
+
+        avgDays = self.getAverageUtilizationByDay(daysUtil)
+        avgWeeks = self.getAverageUtilizationByWeek(avgDays)
+
+        avgsCath = [x[0] for x in avgDays]
+        avgsEP = [x[1] for x in avgDays]
+
+        cathAverage = sum(avgsCath)/len(self.dayBins)
+        epAverage = sum(avgsEP)/len(self.dayBins)
                 
-        return daysUtil
+        return (cathAverage,epAverage,avgDays,avgWeeks,daysUtil)
+
+    def getAverageUtilizationByDay(self,daysUtil):
+        '''
+        '''
+
+        daysUtilCopy = copy.deepcopy(daysUtil)
+        daysAverageUtil = [[] for i in xrange(len(self.dayBins))]
+    
+        for d in xrange(len(self.dayBins)):
+            cathDayTotal = 0
+            epDayTotal = 0
+            for c in xrange(self.numCathRooms):
+                cathDayTotal += daysUtilCopy[d][0][c]
+            for e in xrange(self.numEPRooms):
+                epDayTotal += daysUtilCopy[d][1][e]
+            daysAverageUtil[d].append(cathDayTotal/self.numCathRooms)
+            daysAverageUtil[d].append(epDayTotal/self.numEPRooms)
+
+        return daysAverageUtil
+                
+            
+
+    def getAverageUtilizationByWeek(self,avgDays):
+        '''
+        '''
+
+        avgDaysCopy = copy.deepcopy(avgDays)
+        weeksUtil = [[avgDaysCopy[i],avgDaysCopy[i+1],avgDaysCopy[i+2],avgDaysCopy[i+3],avgDaysCopy[i+4]] for i in xrange(0,len(self.dayBins)-4,5)]
+        weeksAverageUtil = [[] for i in xrange(len(self.weekBins))]
+
+        for w in xrange(len(self.weekBins)):
+            cathWeekTotal = 0
+            epWeekTotal = 0
+            week = weeksUtil[w]
+            for d in xrange(5):
+                cathWeekTotal += week[d][0]
+                epWeekTotal += week[d][1]
+            weeksAverageUtil[w].append(cathWeekTotal/5)
+            weeksAverageUtil[w].append(epWeekTotal/5)
+            
+        return weeksAverageUtil
+        
+
+    def getOverflowWeeksAndProcs(self):
+        '''
+        '''
+
+        overflowWeeks = 0
+        for week in self.weekBins:
+            overflow = False
+            while overflow == False:
+                for d in xrange(5):
+                    if len(week[d][2]) > 0:
+                        overflowWeeks += 1
+                        overflow = True
+                overflow = True
+                        
+        overflowProcs = 0
+        for day in self.dayBins:
+            overflowProcs += len(day[2])
+
+        return (overflowWeeks,overflowProcs)
+
+    def getProcsByMinuteVolume(allProcs):
+        '''
+        '''
+
 
     ##################################### DAY BY DAY PACKING #####################################
     ################################### EMERGENCIES/SAME DAYS ####################################
@@ -298,10 +382,7 @@ class TimePeriod:
                     if procPlaced and originalLab=='EP':
                         self.crossOverProcs += 1
                         self.epToCath += 1
-##                        print "Procedure cross over EP to Cath: "+str(procedure)
-##                        print "Day: "+str(day)
-##                        print "EP schedule that day: "+str(self.dayBins[day][1])
-
+                        
                 # no openings in Cath
                 elif (nextOpenCath == -1):
                     procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms)
@@ -461,8 +542,6 @@ class TimePeriod:
                     if procPlaced and originalLab=='EP':
                         self.crossOverProcs += 1
                         self.epToCath += 1
-##                        print "Procedure cross over EP to Cath: "+str(procedure)
-##                        print "Week: "+str(week)
 
                 # no openings in Cath
                 elif (nextOpenCath == -1):
@@ -650,6 +729,15 @@ def saveResults(cleanOptimizedTimeOnly, workbook, sheet):
     wb.save(workbook)
 
     print "Finished saving results: please see "+workbook+ " for results."
+
+
+
+
+######################################################################################################
+######################################################################################################
+#################################### CONFIGURING/RUNNING THE SCRIPT ##################################
+######################################################################################################
+###################################################################################################### 
         
 
 if __name__ == "__main__":
@@ -657,14 +745,21 @@ if __name__ == "__main__":
 
     ############# VERIFY FOLLOWING VALUES BEFORE RUNNING ##############
 
-    # information regarding the scheduling parameters:
+    ###### information regarding the scheduling parameters ######
+    
     totalTimeRoom = 10.58*60    # total time available in a room per day (min)
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 4              # number of EP rooms available per day
+    numEPRooms = 3              # number of EP rooms available per day
+    
+    # UNCOMMENT the type of crossover policy you want to implement
+    crossoverType = "LabPreference"    
+    #crossoverType = "NoCrossovers"      
+
 
     ###### information regarding the order of information in the data sheet ######
+    
     numEntries = 6              # number of columns in data sheet
     iDay = 0                    # index: Day of period
     iWeek = 1                   # index: Week of period
@@ -678,24 +773,29 @@ if __name__ == "__main__":
     roomConstraint = {0.0:'Cath', 1.0:'EP', 2.0:'either'}
                                 # room constraint key used in data file
 
+
     ###### information regarding the name/location of the data file ######
-    
+
+    # UNCOMMENT the working directory, or add a new one
     os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
     #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
-    # uncomment the data set to analyze or add a new one
+    
+    # UNCOMMENT the data set to analyze, or add a new one
     fileName= 'CathAndEP_PT_SchedHorizon.csv'
     #fileName= 'Volumes1.csv'
     #fileName= 'Volumes2.csv'
 
+
     ###### information regarding the name/location of the output data ######
-    ###### which must be created before running this script ######
+    ########## which must be created before running this script ############
     
-    # uncomment the workbook to save to or add a new one
+    # UNCOMMENT the workbook to save to or add a new one
     workbook = "OptimizedSchedule_RoomHorizonConstraints.xlsx"
     #workbook = "OptimizedSchedule.xlsx"
     #workbook = "Optimized_VolumeIncrease.xlsx"
     sheet = "Results"
     
+
 
     ############# RUNNING OF THE SCRIPT: not necessary to modify #############
 
@@ -704,35 +804,37 @@ if __name__ == "__main__":
     procedures = cleanProcTimes(procedures)
     
     ###### model time period / pack bins ######
-    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms)   # time period model
-    timePeriod.packBins(procedures)                                 # schedule all procedures from data file
+    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms)   # create time period model
+    timePeriod.packBins(procedures,crossoverType)                   # schedule all procedures from data file
 
+    print "PARAMETERS"
     print "Cath rooms: "+str(numCathRooms)
     print "EP rooms: "+str(numEPRooms)
-
-    
-    
-    overflowWeeks = 0
-    for week in timePeriod.weekBins:
-        day = week[0]
-        if len(day[2]) > 0:
-            overflowWeeks += 1
-    print "Total number of overflow weeks: "+str(overflowWeeks)
-
-    overflowProcs = 0
-    for day in timePeriod.dayBins:
-        overflowProcs += len(day[2])
-    print "Total number of overflow procs: "+str(overflowProcs)
-
+    print "Crossover policy: "+str(crossoverType)+"\n"
+    print "OVERFLOW STATS"
+    print "Total of "+str(timePeriod.procsPlaced)+" procedures placed"
+    print "Overflow weeks: "+str(timePeriod.getOverflowWeeksAndProcs()[0])
+    print "Overflow procedures: "+str(timePeriod.getOverflowWeeksAndProcs()[1])+"\n"
+    print "CROSSOVER STATS"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
     print "Total number of Cath procedures in EP: "+str(timePeriod.cathToEP)
-    print "Total number of EP procedures in Cath: "+str(timePeriod.epToCath)
+    print "Total number of EP procedures in Cath: "+str(timePeriod.epToCath)+"\n"
+    print "UTILIZATION STATS"
+    cath, ep, avgUtilDay, avgUtilWeek, util = timePeriod.getUtilizationStatistics()
+    print "Average utilization in Cath over time period: "+str(cath)
+    print "Average utilization in EP over time period: "+str(ep)
+    print "type: 'cath' to view average utilization in Cath over the time period"
+    print "type: 'ep' to view average utilization in EP over the time period"
+    print "type: 'avgUtilDay[day]' to view average utilization in Cath and EP on a given day"
+    print "type: 'avgUtilWeek[week]' to view average utilization in Cath and EP during a given week"
+    print "type: 'util[day]' to view the full utilization breakdown by lab and room on a given day"
     
-    # process results
+    ###### process results ######
     optimized = copy.deepcopy(timePeriod.dayBins)
     optimizedTimeOnly = getOptimizedTimeOnly(optimized)             # only look at proc times
     cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
 
+    ###### save results ######
     #saveResults(cleanedOptimized,workbook,sheet)
     # comment out previous line if you just want to look at summary stats in the shell,
     # and not change the excel sheet
