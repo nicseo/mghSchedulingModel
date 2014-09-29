@@ -89,6 +89,7 @@ class TimePeriod:
 
         # statistical counters
         self.procsPlaced = 0
+        self.procsPlacedData = []
         self.crossOverProcs = 0
         self.cathToEP = 0           # procedures historically done in Cath that are scheduled in an EP room
         self.epToCath = 0           # procedures historically done in EP that are scheduled in a Cath room
@@ -118,19 +119,11 @@ class TimePeriod:
         sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
         sameWeek = [x for x in allProcs if x[iSchedHorizon]==3.0]
 
-        print "PROCEDURE DATA"
-        print "Total procedures after break up: "+str(len(emergencies)+len(sameDay)+len(sameWeek))
-        print "Same day/emergencies: "+str(len(emergencies)+len(sameDay))
+        print "*********PROCEDURE DATA*********"
+        print "Total procedures: "+str(len(emergencies)+len(sameDay)+len(sameWeek))
+        print "Same days: "+str(len(sameDay))
         print "Same weeks: "+str(len(sameWeek))
-        minutes = self.getProcsByMinuteVolume(allProcs)
-        print "\tBREAKDOWN BY MINUTES"
-        print "\tEmergency flex: "+str(minutes[0])
-        print "\tEmergency inflex: "+str(minutes[1])
-        print "\tSame day flex: "+str(minutes[2])
-        print "\tSame day inflex: "+str(minutes[3])
-        print "\tSame week flex: "+str(minutes[4])
-        print "\tSame week inflex: "+str(minutes[5])
-        print
+        print "Emergencies: "+str(len(emergencies))
         
         # schedule same week procedures, week by week, with restricted use of rooms
         for w in range(1,timePeriod.numWeeks+1):
@@ -147,7 +140,7 @@ class TimePeriod:
             self.packBinsForDay(d-1,daysSameDays,True)
 
 
-        # schedule emergency procedures, day by day
+        # schedule emergency procedures, day by day, no restriction on use of rooms
         for d in range(1,timePeriod.numDays+1):
             daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
             daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
@@ -321,6 +314,7 @@ class TimePeriod:
             return False
         else:
             self.procsPlaced += 1
+            self.procsPlacedData.append(procedure)
             return True
 
     def packBinsForDay(self,day,daysProcedures,restricted):
@@ -372,7 +366,6 @@ class TimePeriod:
                         procPlaced = True
                     else:
                         procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms)
-
 
         
         ##### PLACE ALL FLEXIBLE PROCEDURES LAST #####
@@ -474,6 +467,7 @@ class TimePeriod:
             return False
         else:
             self.procsPlaced += 1
+            self.procsPlacedData.append(procedure)
             return True
 
 
@@ -772,9 +766,9 @@ if __name__ == "__main__":
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 3              # number of EP rooms available per day
+    numEPRooms = 4              # number of EP rooms available per day
     numRestrictedCath = 4       #
-    numRestrictedEP = 2         #
+    numRestrictedEP = 3         #
     
     # UNCOMMENT the type of crossover policy you want to implement
     crossoverType = "LabPreference"    
@@ -827,24 +821,45 @@ if __name__ == "__main__":
     procedures = cleanProcTimes(procedures)
     
     ###### model time period / pack bins ######
-    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP) 
-    timePeriod.packBins(procedures,crossoverType)                                                   
+    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP)
+    timePeriod.packBins(procedures,crossoverType)
+    
+    minutes = timePeriod.getProcsByMinuteVolume(procedures)
+    print "\tBREAKDOWN BY MINUTES"
+    print "\tSame week flex: "+str(minutes[4])+" minutes"
+    print "\tSame week inflex: "+str(minutes[5])+" minutes"
+    print "\tSame day flex: "+str(minutes[2])+" minutes"
+    print "\tSame day inflex: "+str(minutes[3])+" minutes"
+    print "\tEmergency flex: "+str(minutes[0])+" minutes"
+    print "\tEmergency inflex: "+str(minutes[1])+" minutes"+"\n"
 
-    print "PARAMETERS"
+    print "*********PARAMETERS*********"
     print "Cath rooms: "+str(numCathRooms)
     print "EP rooms: "+str(numEPRooms)
     print "Cath restricted rooms: "+str(numRestrictedCath)
     print "EP restricted rooms: "+str(numRestrictedEP)
     print "Crossover policy: "+str(crossoverType)+"\n"
-    print "OVERFLOW STATS"
+    
+    print "*********OVERFLOW STATS*********"
     print "Total of "+str(timePeriod.procsPlaced)+" procedures placed"
     print "Overflow weeks: "+str(timePeriod.getOverflowWeeksAndProcs()[0])
-    print "Overflow procedures: "+str(timePeriod.getOverflowWeeksAndProcs()[1])+"\n"
-    print "CROSSOVER STATS"
+    print "Overflow procedures: "+str(timePeriod.getOverflowWeeksAndProcs()[1])
+    minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
+    print "\tBREAKDOWN BY MINUTES PLACED"
+    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/minutes[4])*100,2))+"%)"
+    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/minutes[5])*100,2))+"%)"
+    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/minutes[2])*100,2))+"%)"
+    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/minutes[3])*100,2))+"%)"
+    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/minutes[0])*100,2))+"%)"
+    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(minutes[1]+0.01))*100,2))+"%)"+"\n"
+
+    
+    print "*********CROSSOVER STATS*********"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
     print "Total number of Cath procedures in EP: "+str(timePeriod.cathToEP)
     print "Total number of EP procedures in Cath: "+str(timePeriod.epToCath)+"\n"
-    print "UTILIZATION STATS"
+    
+    print "*********UTILIZATION STATS*********"
     cath, ep, avgUtilDay, avgUtilWeek, util = timePeriod.getUtilizationStatistics()
     print "Average utilization in Cath over time period: "+str(cath)
     print "Average utilization in EP over time period: "+str(ep)
