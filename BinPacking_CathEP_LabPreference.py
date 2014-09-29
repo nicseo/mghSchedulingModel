@@ -32,7 +32,7 @@ Notes about use:
 """
 import csv
 import os
-import openpyxl as px
+#import openpyxl as px
 import copy
 import random
 
@@ -794,8 +794,8 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
+    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
     
     # UNCOMMENT the data set to analyze, or add a new one
     fileName= 'CathAndEP_PT_SchedHorizon.csv'
@@ -823,7 +823,8 @@ if __name__ == "__main__":
     ###### model time period / pack bins ######
     timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP)
     timePeriod.packBins(procedures,crossoverType)
-    
+
+    ###### output summary statistics ######
     minutes = timePeriod.getProcsByMinuteVolume(procedures)
     print "\tBREAKDOWN BY MINUTES"
     print "\tSame week flex: "+str(minutes[4])+" minutes"
@@ -852,7 +853,6 @@ if __name__ == "__main__":
     print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/minutes[3])*100,2))+"%)"
     print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/minutes[0])*100,2))+"%)"
     print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(minutes[1]+0.01))*100,2))+"%)"+"\n"
-
     
     print "*********CROSSOVER STATS*********"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
@@ -873,7 +873,7 @@ if __name__ == "__main__":
     cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
 
     ###### save results ######
-    saveResults(cleanedOptimized,workbook,sheet)
+    #saveResults(cleanedOptimized,workbook,sheet)
     # comment out previous line if you just want to look at summary stats in the shell,
     # and not change the excel sheet
 
