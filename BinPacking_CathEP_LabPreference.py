@@ -32,9 +32,9 @@ Notes about use:
 """
 import csv
 import os
-#import openpyxl as px
+import openpyxl as px
 import copy
-
+import random
 
 ######################################################################################################
 ######################################################################################################
@@ -42,6 +42,7 @@ import copy
 ######################################################################################################
 ###################################################################################################### 
 
+random.seed(30)
 
 class TimePeriod:
     '''
@@ -69,7 +70,7 @@ class TimePeriod:
         
     '''
     
-    def __init__(self,days,numCathRooms,numEPRooms):
+    def __init__(self,days,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP):
 
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
@@ -81,6 +82,8 @@ class TimePeriod:
 
         self.numCathRooms = numCathRooms
         self.numEPRooms = numEPRooms
+        self.numRestrictedCath = numRestrictedCath
+        self.numRestrictedEP = numRestrictedEP
         self.numDays = days
         self.numWeeks = len(self.weekBins)
 
@@ -115,31 +118,42 @@ class TimePeriod:
         sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
         sameWeek = [x for x in allProcs if x[iSchedHorizon]==3.0]
 
+        print "PROCEDURE DATA"
         print "Total procedures after break up: "+str(len(emergencies)+len(sameDay)+len(sameWeek))
         print "Same day/emergencies: "+str(len(emergencies)+len(sameDay))
         print "Same weeks: "+str(len(sameWeek))
-        #self.getProcsByMinuteVolume(allProcs)
+        minutes = self.getProcsByMinuteVolume(allProcs)
+        print "\tBREAKDOWN BY MINUTES"
+        print "\tEmergency flex: "+str(minutes[0])
+        print "\tEmergency inflex: "+str(minutes[1])
+        print "\tSame day flex: "+str(minutes[2])
+        print "\tSame day inflex: "+str(minutes[3])
+        print "\tSame week flex: "+str(minutes[4])
+        print "\tSame week inflex: "+str(minutes[5])
+        print
         
-        
-        # schedule same week procedures next, week by week
+        # schedule same week procedures, week by week, with restricted use of rooms
         for w in range(1,timePeriod.numWeeks+1):
 
             weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w]
             weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
-            self.packBinsForWeek(w-1,weeksProcs)
+            self.packBinsForWeek(w-1,weeksProcs,True)
 
         
-        # schedule emergencies and same day procedures first, day by day
+        # schedule same day procedures, day by day, with restricted use of rooms
         for d in range(1,timePeriod.numDays+1):
-            
             daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
             daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
-            self.packBinsForDay(d-1,daysSameDays)
-            
+            self.packBinsForDay(d-1,daysSameDays,True)
+
+
+        # schedule emergency procedures, day by day
+        for d in range(1,timePeriod.numDays+1):
             daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
             daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
-            self.packBinsForDay(d-1,daysEmergencies)
+            self.packBinsForDay(d-1,daysEmergencies,False)
             
+                
 
     def sumProcTimes(self,dataList):
         '''
@@ -231,13 +245,8 @@ class TimePeriod:
 
         overflowWeeks = 0
         for week in self.weekBins:
-            overflow = False
-            while overflow == False:
-                for d in xrange(5):
-                    if len(week[d][2]) > 0:
-                        overflowWeeks += 1
-                        overflow = True
-                overflow = True
+            if len(week[0][2]) > 0:
+                overflowWeeks += 1
                         
         overflowProcs = 0
         for day in self.dayBins:
@@ -245,9 +254,23 @@ class TimePeriod:
 
         return (overflowWeeks,overflowProcs)
 
-    def getProcsByMinuteVolume(allProcs):
+    def getProcsByMinuteVolume(self,allProcs):
         '''
         '''
+        emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
+        sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
+        sameWeek = [x for x in allProcs if x[iSchedHorizon]==3.0]
+
+        emergFlex = [x for x in emergencies if x[iRoom]==2.0]
+        emergInflex = [x for x in emergencies if x[iRoom]!=2.0]
+
+        sameDayFlex = [x for x in sameDay if x[iRoom]==2.0]
+        sameDayInflex = [x for x in sameDay if x[iRoom]!=2.0]
+
+        sameWeekFlex = [x for x in sameWeek if x[iRoom]==2.0]
+        sameWeekInflex = [x for x in sameWeek if x[iRoom]!=2.0]
+
+        return [self.sumProcTimes(x) for x in [emergFlex,emergInflex,sameDayFlex,sameDayInflex,sameWeekFlex,sameWeekInflex]]
 
 
     ##################################### DAY BY DAY PACKING #####################################
@@ -300,7 +323,7 @@ class TimePeriod:
             self.procsPlaced += 1
             return True
 
-    def packBinsForDay(self,day,daysProcedures):
+    def packBinsForDay(self,day,daysProcedures,restricted):
         '''
         Schedules procedures during a given day, if possible. Keeps track of overflow procedures
         (that couldn't be scheduled in that day).
@@ -311,9 +334,6 @@ class TimePeriod:
         '''
         procsNotPlaced = self.dayBins[day][2]
 
-        #print "Packing same day procedures for day: "+str(day)
-        #print "Number of procedures to pack: "+str(len(daysProcedures))
-
         # divides all procedures into inflexible ones (EP only, Cath only) and flexible ones (either lab)
         allProcs = daysProcedures[:]
         inflexibleProcs = [x for x in allProcs if x[iRoom]!=2.0]
@@ -322,8 +342,8 @@ class TimePeriod:
         ##### PLACE ALL INFLEXIBLE PROCEDURES FIRST #####
         for i in xrange(len(inflexibleProcs)):
 
-            openCathRooms = range(self.numCathRooms)
-            openEPRooms = range(self.numEPRooms)
+            openCathRooms = range(self.numRestrictedCath) if restricted else range(self.numCathRooms)
+            openEPRooms = range(self.numRestrictedEP) if restricted else range(self.numEPRooms)
 
             procedure = inflexibleProcs[i]
             procRoom = roomConstraint[procedure[iRoom]]
@@ -357,9 +377,9 @@ class TimePeriod:
         
         ##### PLACE ALL FLEXIBLE PROCEDURES LAST #####
         for j in xrange(len(flexibleProcs)):
-
-            openCathRooms = range(numCathRooms)
-            openEPRooms = range(numEPRooms)
+            
+            openCathRooms = range(self.numRestrictedCath) if restricted else range(self.numCathRooms)
+            openEPRooms = range(self.numRestrictedEP) if restricted else range(self.numEPRooms)
         
             procedure = flexibleProcs[j]
             originalLab = roomConstraint[procedure[iLab]]
@@ -425,7 +445,7 @@ class TimePeriod:
                     total += self.sumProcTimes(EPRooms[i])
         return total
 
-    def tryPlaceProcInLabWeek(self,procedure,lab,week,nextOpenRoom,openRooms):
+    def tryPlaceProcInLabWeek(self,procedure,lab,week,nextOpenRoom,openRooms,restricted):
         '''
         Tries to place a procedure in a given room, if there is time for it in the week's schedule.
         Input: procedure (list of one procedure's data to be placed)
@@ -438,10 +458,10 @@ class TimePeriod:
         nextOpenRoomOverall = nextOpenRoom      # with reference to the whole week
         
         if lab == 'Cath':
-            nextOpenRoom = nextOpenRoom%self.numCathRooms       # with reference to just one day
+            nextOpenRoom = nextOpenRoom%self.numCathRooms if not restricted else nextOpenRoom%self.numRestrictedCath       # with reference to just one day
             rooms = weekRooms[dayOfWeek][0]
         else:
-            nextOpenRoom = nextOpenRoom%self.numEPRooms         # with reference to just one day
+            nextOpenRoom = nextOpenRoom%self.numEPRooms if not restricted else nextOpenRoom%self.numRestrictedEP        # with reference to just one day
             rooms = weekRooms[dayOfWeek][1]
     
         potentialRoom = rooms[nextOpenRoom]
@@ -457,13 +477,14 @@ class TimePeriod:
             return True
 
 
-    def packBinsForWeek(self,week,weeksProcedures):
+    def packBinsForWeek(self,week,weeksProcedures,restricted):
         '''
         Schedules procedures during a given week, if possible. Keeps track of overflow procedures
         (that couldn't be scheduled in that week).
         
         Input: week (integer week of time period to be scheduled, indexed from 0)
                 weeksProcedures (a list of procedure data for a given week)
+                restricted (a boolean value, denoting whether or not to restrict the scheduling to certain Cath/EP rooms
         Returns: none
         '''
         
@@ -476,14 +497,14 @@ class TimePeriod:
         allProcs = weeksProcedures[:]
         inflexibleProcs = [x for x in allProcs if x[iRoom]!=2.0]
         flexibleProcs = [y for y in allProcs if y[iRoom]==2.0]
+        
 
         ##### PLACE ALL INFLEXIBLE PROCEDURES FIRST #####
         for i in xrange(len(inflexibleProcs)):
-            
-            # all open rooms for the entire week (5 days)
-            openCathRooms = range(self.numCathRooms*5) 
-            openEPRooms = range(self.numEPRooms*5)
 
+            openCathRooms = range(self.numRestrictedCath*5) if restricted else range(self.numCathRooms*5)
+            openEPRooms = range(self.numRestrictedEP*5) if restricted else range(self.numEPRooms*5)
+                    
             procedure = inflexibleProcs[i]
             procRoom = roomConstraint[procedure[iRoom]]
             procPlaced = False
@@ -491,8 +512,8 @@ class TimePeriod:
             while not procPlaced:
 
                 # get the next rooms to be scheduled in both labs, if possible
-                nextOpenCath = openCathRooms[0] if len(openCathRooms)>0 else -1
-                nextOpenEP = openEPRooms[0] if len(openEPRooms)>0 else -1
+                nextOpenCath = random.choice(openCathRooms) if len(openCathRooms)>0 else -1
+                nextOpenEP = random.choice(openEPRooms) if len(openEPRooms)>0 else -1
 
                 # procedure can be placed in CATH ONLY
                 if procRoom == 'Cath':
@@ -502,7 +523,7 @@ class TimePeriod:
                         procsNotPlaced.append(procedure)
                         procPlaced = True
                     else:
-                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms)
+                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms,restricted)
 
                 # procedure can be placed in EP ONLY
                 elif procRoom == 'EP':
@@ -511,15 +532,15 @@ class TimePeriod:
                         procsNotPlaced.append(procedure)
                         procPlaced = True
                     else:
-                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
-
+                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms,restricted)
 
         
         ##### PLACE ALL FLEXIBLE PROCEDURES LAST #####
         for j in xrange(len(flexibleProcs)):
 
-            openCathRooms = range(numCathRooms*5)
-            openEPRooms = range(numEPRooms*5)
+            # all open rooms for the entire week (5 days)
+            openCathRooms = range(self.numRestrictedCath*5) if restricted else range(self.numCathRooms*5)
+            openEPRooms = range(self.numRestrictedEP*5) if restricted else range(self.numEPRooms*5)
         
             procedure = flexibleProcs[j]
             originalLab = roomConstraint[procedure[iLab]]
@@ -528,8 +549,8 @@ class TimePeriod:
             while not procPlaced:
 
                 # get the next rooms to be scheduled in both labs, if possible
-                nextOpenCath = openCathRooms[0] if len(openCathRooms)>0 else -1
-                nextOpenEP = openEPRooms[0] if len(openEPRooms)>0 else -1
+                nextOpenCath = random.choice(openCathRooms) if len(openCathRooms)>0 else -1
+                nextOpenEP = random.choice(openEPRooms) if len(openEPRooms)>0 else -1
 
                 # no openings in either lab
                 if (nextOpenEP == -1) and (nextOpenCath == -1):
@@ -538,14 +559,14 @@ class TimePeriod:
                     
                 # no openings in EP
                 elif (nextOpenEP == -1):
-                    procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms)
+                    procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms,restricted)
                     if procPlaced and originalLab=='EP':
                         self.crossOverProcs += 1
                         self.epToCath += 1
 
                 # no openings in Cath
                 elif (nextOpenCath == -1):
-                    procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
+                    procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms,restricted)
                     if procPlaced and originalLab=='Cath':
                         self.crossOverProcs += 1
                         self.cathToEP += 1
@@ -553,9 +574,9 @@ class TimePeriod:
                 # openings in either lab
                 else:
                     if originalLab=='Cath':
-                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms)
+                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms,restricted)
                     elif originalLab=='EP':                        
-                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms)
+                        procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms,restricted)
                         
 
 
@@ -752,6 +773,8 @@ if __name__ == "__main__":
     turnover = 0                # estimated time for room turnover (min)
     numCathRooms = 5            # number of Cath rooms available per day
     numEPRooms = 3              # number of EP rooms available per day
+    numRestrictedCath = 4       #
+    numRestrictedEP = 2         #
     
     # UNCOMMENT the type of crossover policy you want to implement
     crossoverType = "LabPreference"    
@@ -804,12 +827,14 @@ if __name__ == "__main__":
     procedures = cleanProcTimes(procedures)
     
     ###### model time period / pack bins ######
-    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms)   # create time period model
-    timePeriod.packBins(procedures,crossoverType)                   # schedule all procedures from data file
+    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP) 
+    timePeriod.packBins(procedures,crossoverType)                                                   
 
     print "PARAMETERS"
     print "Cath rooms: "+str(numCathRooms)
     print "EP rooms: "+str(numEPRooms)
+    print "Cath restricted rooms: "+str(numRestrictedCath)
+    print "EP restricted rooms: "+str(numRestrictedEP)
     print "Crossover policy: "+str(crossoverType)+"\n"
     print "OVERFLOW STATS"
     print "Total of "+str(timePeriod.procsPlaced)+" procedures placed"
@@ -823,11 +848,9 @@ if __name__ == "__main__":
     cath, ep, avgUtilDay, avgUtilWeek, util = timePeriod.getUtilizationStatistics()
     print "Average utilization in Cath over time period: "+str(cath)
     print "Average utilization in EP over time period: "+str(ep)
-    print "type: 'cath' to view average utilization in Cath over the time period"
-    print "type: 'ep' to view average utilization in EP over the time period"
-    print "type: 'avgUtilDay[day]' to view average utilization in Cath and EP on a given day"
-    print "type: 'avgUtilWeek[week]' to view average utilization in Cath and EP during a given week"
-    print "type: 'util[day]' to view the full utilization breakdown by lab and room on a given day"
+    print "type: 'avgUtilDay[day]' to view average utilization in Cath and EP on a given day (indexed from 0)"
+    print "type: 'avgUtilWeek[week]' to view average utilization in Cath and EP during a given week (indexed from 0)"
+    print "type: 'util[day]' to view the full utilization breakdown by lab and room on a given day (indexed from 0)"
     
     ###### process results ######
     optimized = copy.deepcopy(timePeriod.dayBins)
@@ -835,7 +858,7 @@ if __name__ == "__main__":
     cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
 
     ###### save results ######
-    #saveResults(cleanedOptimized,workbook,sheet)
+    saveResults(cleanedOptimized,workbook,sheet)
     # comment out previous line if you just want to look at summary stats in the shell,
     # and not change the excel sheet
 
