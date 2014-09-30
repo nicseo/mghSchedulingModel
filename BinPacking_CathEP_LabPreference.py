@@ -35,6 +35,7 @@ import os
 #import openpyxl as px
 import copy
 import random
+import math
 
 ######################################################################################################
 ######################################################################################################
@@ -70,14 +71,14 @@ class TimePeriod:
         
     '''
     
-    def __init__(self,days,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP):
+    def __init__(self,days,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP,labStartTime):
 
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
-        recoveryBay = {i:[] for i in xrange(48)}
+        holdingBays = {i/2.0:0 for i in xrange(0,48)}
         procsNotPlaced = []
 
-        self.dayBins = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms),copy.deepcopy(procsNotPlaced)] for i in xrange(days)]
+        self.dayBins = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms),copy.deepcopy(procsNotPlaced),copy.deepcopy(holdingBays)] for i in xrange(days)]
         self.weekBins = [[self.dayBins[i],self.dayBins[i+1],self.dayBins[i+2],self.dayBins[i+3],self.dayBins[i+4]] for i in xrange(0,len(self.dayBins)-4,5)]
 
         self.numCathRooms = numCathRooms
@@ -86,6 +87,7 @@ class TimePeriod:
         self.numRestrictedEP = numRestrictedEP
         self.numDays = days
         self.numWeeks = len(self.weekBins)
+        self.labStartTime = labStartTime
 
         # statistical counters
         self.procsPlaced = 0
@@ -299,6 +301,8 @@ class TimePeriod:
         Returns: True if placed, False otherwise
         '''
 
+        holdingBays = self.dayBins[day][3]
+
         if lab == 'Cath':
             rooms = self.dayBins[day][0]
         else:
@@ -306,15 +310,37 @@ class TimePeriod:
         
         potentialRoom = rooms[nextOpenRoom]
         potentialRoom.append(procedure)
-        totalRoomTime = self.sumProcTimes(potentialRoom)
+        timeScheduled = self.sumProcTimes(potentialRoom)
 
-        if totalRoomTime > totalTimeRoom:
+        if timeScheduled > totalTimeRoom:
             potentialRoom.pop()
             openRooms.remove(nextOpenRoom)
             return False
         else:
             self.procsPlaced += 1
             self.procsPlacedData.append(procedure)
+
+            # add counters to holding bay
+            procStartTime = self.labStartTime + (self.sumProcTimes(potentialRoom)-procedure[iProcTime])/60.0
+            preHoldingStart = procStartTime - procedure[iPreTime]/60.0
+            postHoldingStart = procStartTime + procedure[iProcTime]/60.0
+            postHoldingEnd = postHoldingStart + procedure[iPostTime]/60.0
+
+            # multipliers to round up/down to nearest 0.5
+            preHoldingStartRound = 0.5*math.floor(2.0*preHoldingStart)
+            preHoldingEndRound = 0.5*math.ceil(2.0*procStartTime)
+            postHoldingStartRound = 0.5*math.floor(2.0*postHoldingStart)
+            postHoldingEndRound = 0.5*math.ceil(2.0*postHoldingEnd)
+
+            numPreSlots = (preHoldingEndRound-preHoldingStartRound)/0.5
+            numPostSlots = (postHoldingEndRound-postHoldingStartRound)/0.5
+
+            for i in range(int(numPreSlots)):
+                holdingBays[preHoldingStartRound+(i*0.5)] += 1
+
+            for j in range(int(numPostSlots)):
+                holdingBays[postHoldingStartRound+(i*0.5)] += 1
+            
             return True
 
     def packBinsForDay(self,day,daysProcedures,restricted):
@@ -456,18 +482,41 @@ class TimePeriod:
         else:
             nextOpenRoom = nextOpenRoom%self.numEPRooms if not restricted else nextOpenRoom%self.numRestrictedEP        # with reference to just one day
             rooms = weekRooms[dayOfWeek][1]
+
+        holdingBays = weekRooms[dayOfWeek][3]
     
         potentialRoom = rooms[nextOpenRoom]
         potentialRoom.append(procedure)
-        totalRoomTime = self.sumProcTimes(potentialRoom)
+        timeScheduled = self.sumProcTimes(potentialRoom)
 
-        if totalRoomTime > totalTimeRoom:
+        if timeScheduled > totalTimeRoom:
             potentialRoom.pop()
             openRooms.remove(nextOpenRoomOverall)
             return False
         else:
             self.procsPlaced += 1
             self.procsPlacedData.append(procedure)
+
+            # add counters to holding bay
+            procStartTime = self.labStartTime + (self.sumProcTimes(potentialRoom)-procedure[iProcTime])/60.0
+            preHoldingStart = procStartTime - procedure[iPreTime]/60.0
+            postHoldingStart = procStartTime + procedure[iProcTime]/60.0
+            postHoldingEnd = postHoldingStart + procedure[iPostTime]/60.0
+
+            preHoldingEndRound = 0.5*math.ceil(2.0*procStartTime)
+            preHoldingStartRound = 0.5*math.floor(2.0*preHoldingStart)
+            postHoldingStartRound = 0.5*math.floor(2.0*postHoldingStart)
+            postHoldingEndRound = 0.5*math.ceil(2.0*postHoldingEnd)
+
+            numPreBays = (preHoldingEndRound - preHoldingStartRound)/0.5
+            numPostBays = (postHoldingEndRound - postHoldingStartRound)/0.5
+
+            for i in range(int(numPreBays)):
+                holdingBays[preHoldingStartRound+(i*0.5)] += 1
+
+            for j in range(int(numPostBays)):
+                holdingBays[postHoldingStartRound+(i*0.5)] += 1
+            
             return True
 
 
@@ -746,6 +795,35 @@ def saveResults(cleanOptimizedTimeOnly, workbook, sheet):
     print "Finished saving results: please see "+workbook+ " for results."
 
 
+def saveSchedulingResults(cleanOptimizedTimeOnly):
+
+    out = open('schedule.csv','wb')
+
+
+def saveHoldingBayResults(timePeriod):
+
+    holdingBayData = open('holdingBays.csv','wb')
+    writer = csv.writer(holdingBayData)
+    
+    times = [i/2.0 for i in xrange(48)]
+    columns = ["Day"]
+    for time in times:
+        hours = math.floor(time)
+        minutes = (time - math.floor(time))*60
+        columns.append(str(int(hours))+":"+str(int(minutes)))
+    writer.writerow(columns)
+    
+    data = []
+    for d in xrange(daysInPeriod):
+        holdingBay = timePeriod.dayBins[d][3]
+        day = [holdingBay[time] for time in times]
+        day.insert(0,str(d+1))
+        data.append(day)
+
+    writer.writerows(data)
+        
+
+
 
 
 ######################################################################################################
@@ -769,6 +847,7 @@ if __name__ == "__main__":
     numEPRooms = 4              # number of EP rooms available per day
     numRestrictedCath = 4       #
     numRestrictedEP = 3         #
+    labStartTime = 8.0
     
     # UNCOMMENT the type of crossover policy you want to implement
     crossoverType = "LabPreference"    
@@ -777,7 +856,7 @@ if __name__ == "__main__":
 
     ###### information regarding the order of information in the data sheet ######
     
-    numEntries = 6              # number of columns in data sheet
+    numEntries = 9              # number of columns in data sheet
     iDay = 0                    # index: Day of period
     iWeek = 1                   # index: Week of period
     iLab = 2                    # index: Lab key (Cath,EP)
@@ -785,6 +864,9 @@ if __name__ == "__main__":
     iRoom = 4                   # index: Room constraint (Cath only, EP only, either)
     iProcType = 6               # index: Procedure type key
     iSchedHorizon = 5           # index: Scheduling horizon key
+    iPreTime = 7
+    iPostTime = 8
+    
     daysInPeriod = 125          # integer: Number of days in period
     
     roomConstraint = {0.0:'Cath', 1.0:'EP', 2.0:'either'}
@@ -794,8 +876,8 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
+    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP:Cath Lab/R:Python Analysis/Joint Unit Model/ReModifiedAlgorithm")
     
     # UNCOMMENT the data set to analyze, or add a new one
     fileName= 'CathAndEP_PT_SchedHorizon.csv'
@@ -821,7 +903,7 @@ if __name__ == "__main__":
     procedures = cleanProcTimes(procedures)
     
     ###### model time period / pack bins ######
-    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP)
+    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP,labStartTime)
     timePeriod.packBins(procedures,crossoverType)
 
     ###### output summary statistics ######
@@ -871,6 +953,8 @@ if __name__ == "__main__":
     optimized = copy.deepcopy(timePeriod.dayBins)
     optimizedTimeOnly = getOptimizedTimeOnly(optimized)             # only look at proc times
     cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
+
+    saveHoldingBayResults(timePeriod)
 
     ###### save results ######
     #saveResults(cleanedOptimized,workbook,sheet)
