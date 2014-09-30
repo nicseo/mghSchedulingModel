@@ -513,7 +513,6 @@ class TimePeriod:
 
             for i in range(int(numPreBays)):
                 holdingBays[preHoldingStartRound+(i*0.5)] += 1
-
             for j in range(int(numPostBays)):
                 holdingBays[postHoldingStartRound+(i*0.5)] += 1
             
@@ -744,16 +743,11 @@ def cleanResults(optimized):
 
     return optimizedCopy
 
-        
 
-def saveResults(cleanOptimizedTimeOnly, workbook, sheet):
-    '''
-    Saves the results of the optimization to an Excel sheet organized by day (rows)
-    and procedure room (Cath Room # Proc #, EP Room # Proc #, Overflow Proc #;  columns)
-    '''
-    
-    wb = px.load_workbook(workbook)
-    entrySheet = wb.get_sheet_by_name(name = sheet)
+def saveSchedulingResults(cleanOptimizedTimeOnly,workbook):
+
+    out = open(workbook,'wb')
+    writer = csv.writer(out)
 
     maxNumCathProcs = len(cleanOptimizedTimeOnly[0][0][0])
     maxNumEPProcs = len(cleanOptimizedTimeOnly[0][1][0])
@@ -762,42 +756,31 @@ def saveResults(cleanOptimizedTimeOnly, workbook, sheet):
     numEPColumns = numEPRooms*maxNumEPProcs
     numOverflowColumns = len(cleanOptimizedTimeOnly[0][2])
 
-    # write column labels
-    entrySheet.cell(row=0,column=0).value = "Day of Period"
-    for cath in xrange(numCathRooms):
-        for proc in xrange(1,maxNumCathProcs+1):
-            entrySheet.cell(row=0,column=(maxNumCathProcs*cath)+proc).value = "Cath Room "+str(cath+1)+" Proc "+str(proc)
-    for ep in xrange(numEPRooms):
-        for proc in xrange(1,maxNumEPProcs+1):
-            entrySheet.cell(row=0,column=(numCathColumns+((maxNumEPProcs*ep)+proc))).value = "EP Room "+str(ep+1)+" Proc "+str(proc)
-    for o in xrange(1,numOverflowColumns+1):
-        entrySheet.cell(row=0, column=numCathColumns+numEPColumns+o).value = "Overflow Proc "+str(o)
+    columns = ['Day']
+    for c in xrange(numCathRooms):
+        for i in xrange(maxNumCathProcs):
+            columns.append('Cath Room '+str(c+1)+' Proc '+str(i+1))
+    for e in xrange(numEPRooms):
+        for j in xrange(maxNumEPProcs):
+            columns.append('EP Room '+str(e+1)+' Proc '+str(j+1))
+    for o in xrange(numOverflowColumns):
+        columns.append('Overflow Proc '+str(o+1))
+    writer.writerow(columns)
 
-
-    # write days' information
+    data = []
     for d in xrange(1,len(cleanOptimizedTimeOnly)+1):
-
-        # write day label
-        entrySheet.cell(row=d,column=0).value = str(d)
-
+        day = [str(d)]
         # write room-procedure/overflow-procedure information
         for cath in xrange(numCathRooms):
             for proc in xrange(1,maxNumCathProcs+1):
-                entrySheet.cell(row=d,column=(maxNumCathProcs*cath)+proc).value = str(round(cleanOptimizedTimeOnly[d-1][0][cath][proc-1],2))
+                day.append(str(round(cleanOptimizedTimeOnly[d-1][0][cath][proc-1],2)))
         for ep in xrange(numEPRooms):
             for proc in xrange(1,maxNumEPProcs+1):
-                entrySheet.cell(row=d,column=(numCathColumns+((maxNumEPProcs*ep)+proc))).value = str(round(cleanOptimizedTimeOnly[d-1][1][ep][proc-1],2))
+                day.append(str(round(cleanOptimizedTimeOnly[d-1][1][ep][proc-1],2)))
         for o in xrange(1,numOverflowColumns+1):
-            entrySheet.cell(row=d, column=numCathColumns+numEPColumns+o).value = str(round(cleanOptimizedTimeOnly[d-1][2][o-1],2))
-
-    wb.save(workbook)
-
-    print "Finished saving results: please see "+workbook+ " for results."
-
-
-def saveSchedulingResults(cleanOptimizedTimeOnly):
-
-    out = open('schedule.csv','wb')
+            day.append(str(round(cleanOptimizedTimeOnly[d-1][2][o-1],2)))
+        data.append(day)
+    writer.writerows(data)
 
 
 def saveHoldingBayResults(timePeriod):
@@ -844,9 +827,9 @@ if __name__ == "__main__":
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 4              # number of EP rooms available per day
-    numRestrictedCath = 4       #
-    numRestrictedEP = 3         #
+    numEPRooms = 3              # number of EP rooms available per day
+    numRestrictedCath = numCathRooms     # default to no reserved rooms for emergencies
+    numRestrictedEP = numEPRooms         # default to no reserved rooms for emergencies
     labStartTime = 8.0
     
     # UNCOMMENT the type of crossover policy you want to implement
@@ -889,11 +872,7 @@ if __name__ == "__main__":
     ########## which must be created before running this script ############
     
     # UNCOMMENT the workbook to save to or add a new one
-    workbook = "OptimizedSchedule_RoomHorizonConstraints.xlsx"
-    #workbook = "OptimizedSchedule.xlsx"
-    #workbook = "Optimized_VolumeIncrease.xlsx"
-    sheet = "Results"
-    
+    workbook = "schedule.csv"    
 
 
     ############# RUNNING OF THE SCRIPT: not necessary to modify #############
@@ -954,10 +933,7 @@ if __name__ == "__main__":
     optimizedTimeOnly = getOptimizedTimeOnly(optimized)             # only look at proc times
     cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
 
-    saveHoldingBayResults(timePeriod)
-
     ###### save results ######
-    #saveResults(cleanedOptimized,workbook,sheet)
-    # comment out previous line if you just want to look at summary stats in the shell,
-    # and not change the excel sheet
+    saveHoldingBayResults(timePeriod)
+    saveSchedulingResults(cleanedOptimized,workbook)
 
