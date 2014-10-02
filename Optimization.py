@@ -9,26 +9,19 @@ on data taken over a 125 day (25 week) period. The constraints of the model are:
     1. Room location (where the procedure must be done)
     2. Scheduling horizon (the time period during which the procedure must be scheduled)
     3. Crossover policy (whether or not procedures are allowed to crossover between lab rooms)
+    4. Week pairing policy (whether or not same week procedures can be scheduled over a two week span)
 
 Notes about use:
-- You must have openpyxl package installed to run this script.
-
 - The first part of this script sets up the necessary functions to carry out the analysis.
     At the bottom of this file, in the __main__ function, there are defined some variables
     that the user should verify before running the script (e.g. regarding the csv that the
     data is being read from).
 
-- Results are output to an Excel sheet, whose workbook name and sheet must EXIST and
-    be specified before running the script. Make sure the sheet is in the same directory
-    as this script.
+- Results are output to a csv, whose name should be specified before running the script.
 
 - Overflow procedures that are emergencies/same day procedures are listed during the day they
     were supposed to be scheduled. Overflows that were supposed to be scheduled within a week
     are listed in the first day of the week's overflows (Monday).
-    
-- If you change the number of Cath/EP rooms in the scheduling parameters, it is recommended
-    that you CLEAR the output file of contents AND formatting before running.
-
 """
 import csv
 import os
@@ -94,6 +87,10 @@ class TimePeriod:
         self.crossOverProcs = 0
         self.cathToEP = 0           # procedures historically done in Cath that are scheduled in an EP room
         self.epToCath = 0           # procedures historically done in EP that are scheduled in a Cath room
+        self.overflowCath = 0
+        self.overflowEP = 0
+        self.overflowWeeks = []
+        self.overflowDays = []
 
     ##################################### BIN PACKING FOR #####################################
     #################################### WHOLE TIME PERIOD ####################################
@@ -115,6 +112,10 @@ class TimePeriod:
             for proc in allProcs:
                 proc[iRoom] = proc[iLab]
 
+        if algType == "AllFlex":
+            for proc in allProcs:
+                proc[iRoom] = 2.0
+
         # break procedures up by scheduling horizon
         emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
         sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
@@ -133,33 +134,33 @@ class TimePeriod:
                 if w == timePeriod.numWeeks:
                     weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w]
                     weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
-                    self.packBinsForWeek(w-1,weeksProcs,True,False)
+                    self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
                 # pair week's procedures with the following week's and schedule over two week span
                 else:
                     weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w or proc[iWeek]==w+1]
                     weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
-                    self.packBinsForWeek(w-1,weeksProcs,True,True)
+                    self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,True)
                     
         # schedule same week procedures in one week spans, with restricted use of rooms
         else:
             for w in range(1,timePeriod.numWeeks+1):
                 weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w]
                 weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
-                self.packBinsForWeek(w-1,weeksProcs,True,False)
+                self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
 
         
         # schedule same day procedures, day by day, with restricted use of rooms
         for d in range(1,timePeriod.numDays+1):
             daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
             daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
-            self.packBinsForDay(d-1,daysSameDays,True)
+            self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
 
 
         # schedule emergency procedures, day by day, no restriction on use of rooms
         for d in range(1,timePeriod.numDays+1):
             daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
             daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
-            self.packBinsForDay(d-1,daysEmergencies,False)
+            self.packBinsForDay(d-1,daysEmergencies,restrictEmergencies,False)
             
                 
 
@@ -305,7 +306,7 @@ class TimePeriod:
 
         return total
 
-    def tryPlaceProcInLabDay(self,procedure,lab,day,nextOpenRoom,openRooms):
+    def tryPlaceProcInLabDay(self,procedure,lab,day,nextOpenRoom,openRooms,paired):
         '''
         Tries to place a procedure in a given room, if there is time for it in the schedule.
         Input: procedure (list of one procedure's data to be placed)
@@ -356,7 +357,7 @@ class TimePeriod:
             
             return True
 
-    def packBinsForDay(self,day,daysProcedures,restricted):
+    def packBinsForDay(self,day,daysProcedures,restricted,paired):
         '''
         Schedules procedures during a given day, if possible. Keeps track of overflow procedures
         (that couldn't be scheduled in that day).
@@ -393,18 +394,30 @@ class TimePeriod:
                     # no rooms open in Cath: over capacity day
                     if nextOpenCath == -1:
                         procsNotPlaced.append(procedure)
+                        if procedure[iLab] == 0.0:
+                            self.overflowCath += 1
+                        else:
+                            self.overflowEP += 1
+                        if day not in self.overflowDays:
+                            self.overflowDays.append(day)
                         procPlaced = True
                     else:
-                        procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms)
+                        procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms,paired)
 
                 # procedure can be placed in EP ONLY
                 elif procRoom == 'EP':
                     # no rooms open in EP: over capacity day
                     if nextOpenEP == -1:
                         procsNotPlaced.append(procedure)
+                        if procedure[iLab] == 0.0:
+                            self.overflowCath += 1
+                        else:
+                            self.overflowEP += 1
+                        if day not in self.overflowDays:
+                            self.overflowDays.append(day)
                         procPlaced = True
                     else:
-                        procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms)
+                        procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms,paired)
 
         
         ##### PLACE ALL FLEXIBLE PROCEDURES LAST #####
@@ -426,18 +439,24 @@ class TimePeriod:
                 # no openings in either lab
                 if (nextOpenEP == -1) and (nextOpenCath == -1):
                     procsNotPlaced.append(procedure)
+                    if procedure[iLab] == 0.0:
+                        self.overflowCath += 1
+                    else:
+                        self.overflowEP += 1
+                    if day not in self.overflowDays:
+                        self.overflowDays.append(day)
                     procPlaced = True
                     
                 # no openings in EP
                 elif (nextOpenEP == -1):
-                    procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms)
+                    procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms,paired)
                     if procPlaced and originalLab=='EP':
                         self.crossOverProcs += 1
                         self.epToCath += 1
                         
                 # no openings in Cath
                 elif (nextOpenCath == -1):
-                    procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms)
+                    procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms,paired)
                     if procPlaced and originalLab=='Cath':
                         self.crossOverProcs += 1
                         self.cathToEP += 1
@@ -445,9 +464,38 @@ class TimePeriod:
                 # openings in either lab
                 else:
                     if originalLab=='Cath':
-                        procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms)
+                        procPlaced = self.tryPlaceProcInLabDay(procedure,'Cath',day,nextOpenCath,openCathRooms,paired)
                     elif originalLab=='EP':                        
-                        procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms)
+                        procPlaced = self.tryPlaceProcInLabDay(procedure,'EP',day,nextOpenEP,openEPRooms,paired)
+
+
+    def tryBumpFlexProc(self,day,fromLab):
+        '''
+        
+        '''
+        numRooms = self.numCathRooms if fromLab==0 else self.numEPRooms
+        procsToTry = [x for r in xrange(numRooms) for x in self.dayBins[day][fromLab][r] if x[iRoom]==2.0 and x[iSchedHorizon]==3.0]
+
+        procBumped = False
+        bumped = None
+        for proc in procsToTry:
+            if procBumped == True:
+                break
+            dummyPeriod = copy.deepcopy(self)
+            procSwitched = proc[:]
+            procSwitched[iLab] = 1.0 if fromLab==0 else 0.0     # switch the "original" lab
+            procSwitched[iRoom] = 1.0 if fromLab==0 else 0.0    # make the procedure inflexible
+            dummyPeriod.packBinsForDay(day,[procSwitched],False,False)
+            if procSwitched not in dummyPeriod.dayBins[day][3]:
+                ######### NEED TO DELETE THE PROCEDURE FROM ITS ORIGINAL SLOT
+                procBumped = True
+                bumped = procSwitched
+                self.packBinsForDay(day,[procSwitched],False,False)
+
+        return procBumped
+
+                    
+            
                                 
 
     ##################################### WEEK BY WEEK PACKING #####################################
@@ -489,6 +537,8 @@ class TimePeriod:
         numCathRooms = self.numRestrictedCath if restricted else self.numCathRooms
         numEPRooms = self.numRestrictedEP if restricted else self.numEPRooms
 
+        nextOpenRoomOverall = nextOpenRoom      # with reference to the whole span
+
         if paired:
             bothWeeksRooms = self.weekBins[week:week+2]
             weekSelected = nextOpenRoom/(numCathRooms*5) if lab=='Cath' else nextOpenRoom/(numEPRooms*5)
@@ -498,14 +548,13 @@ class TimePeriod:
             weekRooms = self.weekBins[week]
             weekSelected = week
             dayOfWeek = (nextOpenRoom/5)            # value:0-4 (0=M,1=T,2=W,3=R,4=F)
-            
-        nextOpenRoomOverall = nextOpenRoom      # with reference to the whole span
+
         
         if lab == 'Cath':
-            nextOpenRoom = nextOpenRoom%self.numCathRooms if not restricted else nextOpenRoom%self.numRestrictedCath       # with reference to just one day
+            nextOpenRoom = nextOpenRoom%numCathRooms      # with reference to just one day
             rooms = weekRooms[dayOfWeek][0]
         else:
-            nextOpenRoom = nextOpenRoom%self.numEPRooms if not restricted else nextOpenRoom%self.numRestrictedEP        # with reference to just one day
+            nextOpenRoom = nextOpenRoom%numEPRooms        # with reference to just one day
             rooms = weekRooms[dayOfWeek][1]
 
         holdingBays = weekRooms[dayOfWeek][3]
@@ -575,8 +624,8 @@ class TimePeriod:
                 openEPRooms = range(self.numRestrictedEP*10) if restricted else range(self.numEPRooms*10)
             # open rooms for one week only
             else:
-                openCathRooms = range(self.numRestrictedCath*5) if restricted else range(self.numCathRooms*10)
-                openEPRooms = range(self.numRestrictedEP*5) if restricted else range(self.numEPRooms*10)
+                openCathRooms = range(self.numRestrictedCath*5) if restricted else range(self.numCathRooms*5)
+                openEPRooms = range(self.numRestrictedEP*5) if restricted else range(self.numEPRooms*5)
                     
             procedure = inflexibleProcs[i]
             procRoom = roomConstraint[procedure[iRoom]]
@@ -594,6 +643,13 @@ class TimePeriod:
                     if nextOpenCath == -1:
                         print "overflow"
                         procsNotPlaced.append(procedure)
+                        if procedure[iLab] == 0.0:
+                            self.overflowCath += 1
+                        else:
+                            self.overflowEP += 1
+
+                        if week not in self.overflowWeeks:
+                            self.overflowWeeks.append(week)
                         procPlaced = True
                     else:
                         procPlaced = self.tryPlaceProcInLabWeek(procedure,'Cath',week,nextOpenCath,openCathRooms,restricted,paired)
@@ -603,6 +659,12 @@ class TimePeriod:
                     # no rooms open in EP: over capacity day
                     if nextOpenEP == -1:
                         procsNotPlaced.append(procedure)
+                        if procedure[iLab] == 0.0:
+                            self.overflowCath += 1
+                        else:
+                            self.overflowEP += 1
+                        if week not in self.overflowWeeks:
+                            self.overflowWeeks.append(week)
                         procPlaced = True
                     else:
                         procPlaced = self.tryPlaceProcInLabWeek(procedure,'EP',week,nextOpenEP,openEPRooms,restricted,paired)
@@ -617,8 +679,8 @@ class TimePeriod:
                 openEPRooms = range(self.numRestrictedEP*10) if restricted else range(self.numEPRooms*10)
             # open rooms for one week only
             else:
-                openCathRooms = range(self.numRestrictedCath*5) if restricted else range(self.numCathRooms*10)
-                openEPRooms = range(self.numRestrictedEP*5) if restricted else range(self.numEPRooms*10)
+                openCathRooms = range(self.numRestrictedCath*5) if restricted else range(self.numCathRooms*5)
+                openEPRooms = range(self.numRestrictedEP*5) if restricted else range(self.numEPRooms*5)
         
             procedure = flexibleProcs[j]
             originalLab = roomConstraint[procedure[iLab]]
@@ -633,6 +695,12 @@ class TimePeriod:
                 # no openings in either lab
                 if (nextOpenEP == -1) and (nextOpenCath == -1):
                     procsNotPlaced.append(procedure)
+                    if procedure[iLab] == 0.0:
+                        self.overflowCath += 1
+                    else:
+                        self.overflowEP += 1
+                    if week not in self.overflowWeeks:
+                            self.overflowWeeks.append(week)
                     procPlaced = True
                     
                 # no openings in EP
@@ -862,19 +930,25 @@ if __name__ == "__main__":
     totalTimeRoom = 10.58*60    # total time available in a room per day (min)
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
+    labStartTime = 8.0          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
+    
     numCathRooms = 5            # number of Cath rooms available per day
     numEPRooms = 3              # number of EP rooms available per day
-    numRestrictedCath = numCathRooms     # default to no reserved rooms for emergencies
-    numRestrictedEP = numEPRooms         # default to no reserved rooms for emergencies
-    labStartTime = 8.0
+    
+    numRestrictedCath = 4       # default to no reserved rooms for emergencies
+    numRestrictedEP = 2         # default to no reserved rooms for emergencies
+    restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
+    restrictDays = False        # whether or not to restrict the same day procedures to the number of restricted rooms
+    restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
     
     # UNCOMMENT the type of crossover policy you want to implement
-    crossoverType = "LabPreference"    
+    #crossoverType = "LabPreference"    
     #crossoverType = "NoCrossovers"
+    crossoverType = "AllFlex"
 
     # UNCOMMENT the week pairing policy you want to implement
-    #weekPairs = True            # will schedule same week procedures across a two week span
-    weekPairs = False          # will schedule same week procedures during their original one week span
+    weekPairs = True            # will schedule same week procedures across a two week span
+    #weekPairs = False           # will schedule same week procedures during their original one week span
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -900,11 +974,11 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/R_PythonAnalysis/Joint Unit Model/ReModifiedAlgorithm")
+    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/R_PythonAnalysis/Joint Unit Model/ReModifiedAlgorithm")
     
     # UNCOMMENT the data set to analyze, or add a new one
-    fileName= 'CathAndEP_PrimetimeAttSchdRestricted.csv'
+    fileName= 'InputData/CathAndEP_PrimetimeAttSchdRestricted.csv'
     #fileName= 'Volumes1.csv'
     #fileName= 'Volumes2.csv'
 
@@ -942,8 +1016,8 @@ if __name__ == "__main__":
     print "*********PARAMETERS*********"
     print "Cath rooms: "+str(numCathRooms)
     print "EP rooms: "+str(numEPRooms)
-    print "Cath restricted rooms: "+str(numRestrictedCath)
-    print "EP restricted rooms: "+str(numRestrictedEP)
+    print "Cath rooms used for non-emergencies: "+str(numRestrictedCath)
+    print "EP rooms used for non-emergencies: "+str(numRestrictedEP)
     print "Crossover policy: "+str(crossoverType)
     print "Pair weeks for scheduling? "+str(weekPairs)+"\n"
     
@@ -951,14 +1025,18 @@ if __name__ == "__main__":
     print "Total of "+str(timePeriod.procsPlaced)+" procedures placed"
     print "Overflow weeks: "+str(timePeriod.getOverflowWeeksAndProcs()[0])
     print "Overflow procedures: "+str(timePeriod.getOverflowWeeksAndProcs()[1])
+    print "Cath overflows: "+str(timePeriod.overflowCath)
+    print "EP overflows: "+str(timePeriod.overflowEP)
+    print "Weeks with overflow: "+str(timePeriod.overflowWeeks)
+    print "Days with overflow: "+str(timePeriod.overflowDays)
     minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
     print "\tBREAKDOWN BY MINUTES PLACED"
-    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/minutes[4])*100,2))+"%)"
-    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/minutes[5])*100,2))+"%)"
-    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/minutes[2])*100,2))+"%)"
-    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/minutes[3])*100,2))+"%)"
-    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/minutes[0])*100,2))+"%)"
-    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(minutes[1]+0.01))*100,2))+"%)"+"\n"
+    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/(minutes[4])*100+0.001),2))+"%)"
+    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/(minutes[5])*100+0.01),2))+"%)"
+    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/(minutes[2])*100+0.001),2))+"%)"
+    print "\tSame day inflex: "+str(minutesPlaced[3])+" out     of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/(minutes[3])*100+0.001),2))+"%)"
+    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/(minutes[0]+0.001))*100,2))+"%)"
+    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(minutes[1]+0.001))*100,2))+"%)"+"\n"
     
     print "*********CROSSOVER STATS*********"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
