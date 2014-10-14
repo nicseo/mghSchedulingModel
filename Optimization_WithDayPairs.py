@@ -11,6 +11,12 @@ on data taken over a 125 day (25 week) period. The constraints of the model are:
     3. Crossover policy (whether or not procedures are allowed to crossover between lab rooms)
     4. Week pairing policy (whether or not same week procedures can be scheduled over a two week span)
     5. Day pairing policy (whether or not same day procedures can be scheduled over a two day span: M,T/W,R/F)
+    6. Same day only policy (whether or not procedures are scheduled on the same day they were historically or
+       based on their scheduling horizon)
+    7. Random post procedure time policy (whether or not to assign a random post procedure time from a distribution
+       with a given mean and standard deviation)
+    8. Resolution of holding bay time bins
+    9. Priority policy (whether to place longest procedures first, shortest first, or as the input data stands)
 
 Notes about use:
 - The first part of this script sets up the necessary functions to carry out the analysis.
@@ -68,7 +74,8 @@ class TimePeriod:
 
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
-        holdingBays = {i/2.0:0 for i in xrange(0,48)}
+        multiple = 60.0/resolution
+        holdingBays = {i/multiple:0 for i in xrange(0,int(24*multiple))}
         procsNotPlaced = []
 
         self.dayBins = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms),copy.deepcopy(procsNotPlaced),copy.deepcopy(holdingBays)] for i in xrange(days)]
@@ -126,7 +133,7 @@ class TimePeriod:
         if postProcRandom:
             # change the post procedure time to a random value from a distribution with a given mean/standard deviation
             for proc in allProcs:
-                postTime = random.lognormvariate(desiredMean, desiredStDev)
+                postTime = random.gauss(desiredMean, desiredStDev)
                 proc[iPostTime] = postTime
 
         # break procedures up by scheduling horizon
@@ -146,7 +153,10 @@ class TimePeriod:
                 # last week: no weeks left to pair with
                 if w == timePeriod.numWeeks:
                     weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w]
-                    weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
+                    if priority == 'shortest':
+                        weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
+                    elif priority == 'longest':
+                        weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]),True)
                     self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
                 # pair week's procedures with the following week's and schedule over two week span
                 else:
@@ -157,7 +167,10 @@ class TimePeriod:
         else:
             for w in range(1,timePeriod.numWeeks+1):
                 weeksProcs = [proc for proc in sameWeek if proc[iWeek]==w]
-                weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                if priority == 'shortest':
+                    weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                elif priority == 'longest':
+                    weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
                 self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
         
         # schedule SAME DAY procedures in a two day span (M,T/W,R/F)
@@ -169,25 +182,37 @@ class TimePeriod:
                 # Monday: should not be paired
                 elif (d%5 == 1):
                     daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
-                    daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                    if priority == 'shortest':
+                        daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                    elif priority == 'longest':
+                        daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
                     self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 # Tuesday/Thursday: should be paired
                 else:
                     twoDaysProcs = [proc for proc in sameDay if proc[iDay]==d or proc[iDay]==d+1]
-                    twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                    if priority == 'shortest':
+                        twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                    elif priority == 'longest':
+                        twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
                     self.packBinsForDay(d-1,twoDaysProcs,restrictDays,True)
         # schedule same day procedures in a one day span 
         else:
             for d in range(1,timePeriod.numDays+1):
                 daysSameDays = [proc for proc in sameDay if proc[iDay]==d]
-                daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                if priority == 'shortest':
+                    daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+                elif priority == 'longest':
+                    daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
                 self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 
 
         # schedule EMERGENCY procedures, day by day, no restriction on use of rooms
         for d in range(1,timePeriod.numDays+1):
             daysEmergencies = [proc for proc in emergencies if proc[iDay]==d]
-            daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+            if priority == 'shortest':
+                daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
+            elif priority == 'longest':
+                daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
             self.packBinsForDay(d-1,daysEmergencies,restrictEmergencies,False)
             
                 
@@ -342,8 +367,6 @@ class TimePeriod:
         Returns: True if placed, False otherwise
         '''
 
-        holdingBays = self.dayBins[day][3]
-
         numCathRooms = self.numRestrictedCath if restricted else self.numCathRooms
         numEPRooms = self.numRestrictedEP if restricted else self.numEPRooms
 
@@ -363,6 +386,8 @@ class TimePeriod:
         else:
             nextOpenRoom = nextOpenRoom%numEPRooms
             rooms = dayRooms[1]
+
+        holdingBays = self.dayBins[day][3]
         
         potentialRoom = rooms[nextOpenRoom]
         potentialRoom.append(procedure)
@@ -378,24 +403,26 @@ class TimePeriod:
 
             # add counters to holding bay
             procStartTime = self.labStartTime + (self.sumProcTimes(potentialRoom)-procedure[iProcTime])/60.0
-            preHoldingStart = procStartTime - procedure[iPreTime]/60.0
+            preHoldingStart = procStartTime - procedure[iPreTime]
             postHoldingStart = procStartTime + procedure[iProcTime]/60.0
-            postHoldingEnd = postHoldingStart + procedure[iPostTime]/60.0
+            postHoldingEnd = postHoldingStart + procedure[iPostTime]
 
-            # multipliers to round up/down to nearest 0.5
-            preHoldingStartRound = 0.5*math.floor(2.0*preHoldingStart)
-            preHoldingEndRound = 0.5*math.ceil(2.0*procStartTime)
-            postHoldingStartRound = 0.5*math.floor(2.0*postHoldingStart)
-            postHoldingEndRound = 0.5*math.ceil(2.0*postHoldingEnd)
+            # multipliers to round up/down to nearest resolution
+            fraction = resolution/60.0
+            multiple = 60.0/resolution
+            preHoldingStartRound = fraction*math.floor(multiple*preHoldingStart)
+            preHoldingEndRound = fraction*math.ceil(multiple*procStartTime)
+            postHoldingStartRound = fraction*math.floor(multiple*postHoldingStart)
+            postHoldingEndRound = fraction*math.ceil(multiple*postHoldingEnd)
 
-            numPreSlots = (preHoldingEndRound-preHoldingStartRound)/0.5
-            numPostSlots = (postHoldingEndRound-postHoldingStartRound)/0.5
+            numPreSlots = (preHoldingEndRound-preHoldingStartRound)/fraction
+            numPostSlots = (postHoldingEndRound-postHoldingStartRound)/fraction
 
             for i in range(int(numPreSlots)):
-                holdingBays[preHoldingStartRound+(i*0.5)] += 1
+                holdingBays[preHoldingStartRound+(i*fraction)] += 1
 
             for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(i*0.5)] += 1
+                holdingBays[postHoldingStartRound+(i*fraction)] += 1
             
             return True
 
@@ -627,22 +654,26 @@ class TimePeriod:
 
             # add counters to holding bay
             procStartTime = self.labStartTime + (self.sumProcTimes(potentialRoom)-procedure[iProcTime])/60.0
-            preHoldingStart = procStartTime - procedure[iPreTime]/60.0
+            preHoldingStart = procStartTime - procedure[iPreTime]
             postHoldingStart = procStartTime + procedure[iProcTime]/60.0
-            postHoldingEnd = postHoldingStart + procedure[iPostTime]/60.0
+            postHoldingEnd = postHoldingStart + procedure[iPostTime]
 
-            preHoldingEndRound = 0.5*math.ceil(2.0*procStartTime)
-            preHoldingStartRound = 0.5*math.floor(2.0*preHoldingStart)
-            postHoldingStartRound = 0.5*math.floor(2.0*postHoldingStart)
-            postHoldingEndRound = 0.5*math.ceil(2.0*postHoldingEnd)
+            # multipliers to round up/down to nearest resolution
+            fraction = resolution/60.0
+            multiple = 60.0/resolution
+            preHoldingStartRound = fraction*math.floor(multiple*preHoldingStart)
+            preHoldingEndRound = fraction*math.ceil(multiple*procStartTime)
+            postHoldingStartRound = fraction*math.floor(multiple*postHoldingStart)
+            postHoldingEndRound = fraction*math.ceil(multiple*postHoldingEnd)
 
-            numPreBays = (preHoldingEndRound - preHoldingStartRound)/0.5
-            numPostBays = (postHoldingEndRound - postHoldingStartRound)/0.5
+            numPreSlots = (preHoldingEndRound-preHoldingStartRound)/fraction
+            numPostSlots = (postHoldingEndRound-postHoldingStartRound)/fraction
 
-            for i in range(int(numPreBays)):
-                holdingBays[preHoldingStartRound+(i*0.5)] += 1
-            for j in range(int(numPostBays)):
-                holdingBays[postHoldingStartRound+(i*0.5)] += 1
+            for i in range(int(numPreSlots)):
+                holdingBays[preHoldingStartRound+(i*fraction)] += 1
+
+            for j in range(int(numPostSlots)):
+                holdingBays[postHoldingStartRound+(i*fraction)] += 1
             
             return True
 
@@ -944,8 +975,9 @@ def saveHoldingBayResults(timePeriod,workbook):
 
     out = open(workbook,'wb')
     writer = csv.writer(out)
-    
-    times = [i/2.0 for i in xrange(48)]
+
+    multiple = 60.0/resolution
+    times = [i/multiple for i in xrange(int(24*multiple))]
     columns = ["Day"]
     for time in times:
         hours = math.floor(time)
@@ -962,9 +994,6 @@ def saveHoldingBayResults(timePeriod,workbook):
 
     writer.writerows(data)
         
-
-
-
 
 ######################################################################################################
 ######################################################################################################
@@ -1016,9 +1045,17 @@ if __name__ == "__main__":
 
     # UNCOMMENT the post procedure time policy you want to implement
     postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
-    #postProcRandom = False     # will use the post procedure time specified in the input data
+    #postProcRandom = False      # will use the post procedure time specified in the input data
     desiredMean = 3.0           # in hours
-    desiredStDev= 0.25         # in hours
+    desiredStDev= 0.25          # in hours
+
+    # SPECIFY the resolution for holding bay times
+    resolution = 15.0           # in minutes
+
+    # UNCOMMENT the placement priority you want to implement
+    #priority = 'shortest'
+    #priority = 'longest'
+    priority = 'none'
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -1030,10 +1067,10 @@ if __name__ == "__main__":
     iProcTime = 3               # index: Procedure time (minutes)
     iSchedHorizon = 4           # index: Scheduling horizon key
     iRoom = 5                   # index: Room constraint (Cath only, EP only, either)
-    iProcType = 6               # index: Procedure type key
-    iProvider = 7               # index: Provider key
-    iPreTime = 8                # index: The amount of pre-procedure holding time needed (minutes)
-    iPostTime = 9               # index: The amount of post-procedure holding time needed (minutes)
+    iProcType = 8               # index: Procedure type key
+    iProvider = 9               # index: Provider key
+    iPreTime = 6                # index: The amount of pre-procedure holding time needed (minutes)
+    iPostTime = 7               # index: The amount of post-procedure holding time needed (minutes)
     
     daysInPeriod = 125          # integer: Number of days in period
     
@@ -1044,8 +1081,8 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathAndEP_PrimetimeAttSchdRestricted.csv'    
