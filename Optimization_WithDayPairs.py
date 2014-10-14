@@ -116,6 +116,18 @@ class TimePeriod:
         if algType == "AllFlex":
             for proc in allProcs:
                 proc[iRoom] = 2.0
+                
+        if sameDaysOnly:
+            # change all same week procedures to same day
+            for proc in allProcs:
+                original = proc[iSchedHorizon]
+                proc[iSchedHorizon] = 2.0 if original==3.0 else original
+
+        if postProcRandom:
+            # change the post procedure time to a random value from a distribution with a given mean/standard deviation
+            for proc in allProcs:
+                postTime = random.lognormvariate(desiredMean, desiredStDev)
+                proc[iPostTime] = postTime
 
         # break procedures up by scheduling horizon
         emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
@@ -981,6 +993,9 @@ if __name__ == "__main__":
     restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
     restrictDays = True         # whether or not to restrict the same day procedures to the number of restricted rooms
     restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
+
+
+    ###### information regarding constraint policies ######
     
     # UNCOMMENT the type of crossover policy you want to implement
     crossoverType = "LabPreference"    #Allows crossovers as coded in the data, but attempts to place procedures in their own lab
@@ -992,6 +1007,18 @@ if __name__ == "__main__":
     #weekPairs = False           # will schedule same week procedures during their original one week span
     dayPairs = True
     #dayPairs = False
+
+
+    # UNCOMMENT the same day/same week policy you want to implement
+    sameDaysOnly = True         # will schedule all procedures on the day they were historically scheduled
+    #sameDaysOnly = False        # will shedule procedures based on their scheduling horizon
+
+
+    # UNCOMMENT the post procedure time policy you want to implement
+    postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
+    #postProcRandom = False     # will use the post procedure time specified in the input data
+    desiredMean = 3.0           # in hours
+    desiredStDev= 0.25         # in hours
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -1017,8 +1044,8 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathAndEP_PrimetimeAttSchdRestricted.csv'    
@@ -1076,12 +1103,12 @@ if __name__ == "__main__":
     #print "Days with overflow: "+str(timePeriod.overflowDays)
     minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
     print "\tBREAKDOWN BY MINUTES PLACED"
-    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/(minutes[4])*100+0.001),2))+"%)"
-    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/(minutes[5])*100+0.01),2))+"%)"
-    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/(minutes[2])*100+0.001),2))+"%)"
-    print "\tSame day inflex: "+str(minutesPlaced[3])+" out     of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/(minutes[3])*100+0.001),2))+"%)"
-    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/(minutes[0]+0.001))*100,2))+"%)"
-    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(minutes[1]+0.001))*100,2))+"%)"+"\n"
+    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("#+str(round((minutesPlaced[4]/(minutes[4])*100+0.001),2))+"%)"
+    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("#+str(round((minutesPlaced[5]/(minutes[5])*100+0.01),2))+"%)"
+    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("#+str(round((minutesPlaced[2]/(minutes[2])*100+0.001),2))+"%)"
+    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("#+str(round((minutesPlaced[3]/(minutes[3])*100+0.001),2))+"%)"
+    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("#+str(round((minutesPlaced[0]/(minutes[0]+0.001))*100,2))+"%)"
+    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("#+str(round((minutesPlaced[1]/(minutes[1]+0.001))*100,2))+"%)"+"\n"
     
     print "*********CROSSOVER STATS*********"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
