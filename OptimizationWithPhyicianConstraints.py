@@ -948,8 +948,8 @@ if __name__ == "__main__":
     numCathRooms = 5            # number of Cath rooms available per day
     numEPRooms = 3              # number of EP rooms available per day
     
-    numRestrictedCath = 2       # default to no reserved rooms for emergencies
-    numRestrictedEP = 1         # default to no reserved rooms for emergencies
+    numRestrictedCath = 5       # default to no reserved rooms for emergencies
+    numRestrictedEP = 3         # default to no reserved rooms for emergencies
     restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
     restrictDays = True         # whether or not to restrict the same day procedures to the number of restricted rooms
     restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
@@ -962,8 +962,8 @@ if __name__ == "__main__":
     # UNCOMMENT the week pairing policy you want to implement
     #weekPairs = True            # will schedule same week procedures across a two week span
     weekPairs = False           # will schedule same week procedures during their original one week span
-    dayPairs = True
-    # dayPairs = False
+    #dayPairs = True
+    dayPairs = False
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -975,10 +975,10 @@ if __name__ == "__main__":
     iProcTime = 3               # index: Procedure time (minutes)
     iSchedHorizon = 4           # index: Scheduling horizon key
     iRoom = 5                   # index: Room constraint (Cath only, EP only, either)
-    iProcType = 6               # index: Procedure type key
-    iProvider = 7               # index: Provider key
-    iPreTime = 8                # index: The amount of pre-procedure holding time needed (minutes)
-    iPostTime = 9               # index: The amount of post-procedure holding time needed (minutes)
+    iProcType = 8               # index: Procedure type key
+    iProvider = 9               # index: Provider key
+    iPreTime = 6                # index: The amount of pre-procedure holding time needed (minutes)
+    iPostTime = 7               # index: The amount of post-procedure holding time needed (minutes)
     
     daysInPeriod = 125          # integer: Number of days in period
     
@@ -989,15 +989,15 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathAndEP_PrimetimeAttSchdRestricted.csv'    
-    #fileName= 'InputData/CathAndEPProcRestrictedEventID3.csv'
+    fileName= 'InputData/CathAndEPProcRestrictedEventID3.csv'
     #fileName= 'Volumes1.csv'
     #fileName= 'Volumes2.csv'
-    fileName = 'InputData/TestInput.csv'
+    #fileName = 'InputData/TestInput.csv'
 
 
     ###### information regarding the name/location of the output data ######
