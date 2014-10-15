@@ -1015,7 +1015,7 @@ if __name__ == "__main__":
     labStartTime = 8.0          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 3              # number of EP rooms available per day
+    numEPRooms = 4              # number of EP rooms available per day
     
     numRestrictedCath = 5       # default to no reserved rooms for emergencies
     numRestrictedEP = 3         # default to no reserved rooms for emergencies
@@ -1039,14 +1039,14 @@ if __name__ == "__main__":
 
 
     # UNCOMMENT the same day/same week policy you want to implement
-    #sameDaysOnly = True         # will schedule all procedures on the day they were historically scheduled
+    sameDaysOnly = True         # will schedule all procedures on the day they were historically scheduled
     #sameDaysOnly = False        # will shedule procedures based on their scheduling horizon
 
 
     # UNCOMMENT the post procedure time policy you want to implement
-    postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
+    #postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
     #postProcRandom = False      # will use the post procedure time specified in the input data
-    desiredMean = 3.0           # in hours
+    desiredMean = 4.0           # in hours
     desiredStDev= 0.25          # in hours
 
     # SPECIFY the resolution for holding bay times
@@ -1086,7 +1086,7 @@ if __name__ == "__main__":
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathAndEP_PrimetimeAttSchdRestricted.csv'    
-    fileName= 'InputData/CathAndEPProcRestrictedEventID3.csv'
+    fileName= 'InputData/CathFlatEPGrow2.csv'
     #fileName= 'Volumes1.csv'
     #fileName= 'Volumes2.csv'
     #fileName = 'InputData/TestInput.csv'
