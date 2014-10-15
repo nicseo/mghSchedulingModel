@@ -156,7 +156,7 @@ class TimePeriod:
                     if priority == 'shortest':
                         weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
-                        weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]),True)
+                        weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]),reverse=True)
                     self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
                 # pair week's procedures with the following week's and schedule over two week span
                 else:
@@ -170,7 +170,7 @@ class TimePeriod:
                 if priority == 'shortest':
                     weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                 elif priority == 'longest':
-                    weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
+                    weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
                 self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
         
         # schedule SAME DAY procedures in a two day span (M,T/W,R/F)
@@ -185,7 +185,7 @@ class TimePeriod:
                     if priority == 'shortest':
                         daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
-                        daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
+                        daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
                     self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 # Tuesday/Thursday: should be paired
                 else:
@@ -193,7 +193,7 @@ class TimePeriod:
                     if priority == 'shortest':
                         twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
-                        twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
+                        twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
                     self.packBinsForDay(d-1,twoDaysProcs,restrictDays,True)
         # schedule same day procedures in a one day span 
         else:
@@ -202,7 +202,7 @@ class TimePeriod:
                 if priority == 'shortest':
                     daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                 elif priority == 'longest':
-                    daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
+                    daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
                 self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 
 
@@ -212,7 +212,7 @@ class TimePeriod:
             if priority == 'shortest':
                 daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
             elif priority == 'longest':
-                daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),True)
+                daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
             self.packBinsForDay(d-1,daysEmergencies,restrictEmergencies,False)
             
                 
@@ -1054,8 +1054,8 @@ if __name__ == "__main__":
 
     # UNCOMMENT the placement priority you want to implement
     #priority = 'shortest'
-    #priority = 'longest'
-    priority = 'none'
+    priority = 'longest'
+    #priority = 'none'
 
 
     ###### information regarding the order of information in the data sheet ######
