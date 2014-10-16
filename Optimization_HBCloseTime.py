@@ -1040,7 +1040,7 @@ if __name__ == "__main__":
     totalTimeRoom = 10.58*60    # total time available in a room per day (min)
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
-    labStartTime = 6          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
+    labStartTime = 8          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
     numEPRooms = 4              # number of EP rooms available per day
