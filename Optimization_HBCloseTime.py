@@ -432,13 +432,17 @@ class TimePeriod:
 
             for i in range(int(numPreSlots)):
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
-
-            if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
-              for j in range(int(numPostSlots)):
-                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
-            else:
-              for j in range(int(HBCloseTime*multiple)):
-                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
+                
+            #The if statement is meant to prevent Dict Key errors when a patient's recovery time 
+            #is so long as to exceed the number of available holdingBay slots.
+            #However it doesn't quite work and instead I've increased the number of holding bay
+            #slots to prevent this error
+            #if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
+            for j in range(int(numPostSlots)):
+                holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            #else:
+            #  for j in range(int(HBCloseTime*multiple)):
+            #      holdingBays[postHoldingStartRound+(j*fraction)] += 1
             
             return True
 
@@ -688,12 +692,16 @@ class TimePeriod:
             for i in range(int(numPreSlots)):
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
             
-            if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
-              for j in range(int(numPostSlots)):
-                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
-            else:
-              for j in range(int(HBCloseTime*multiple)):
-                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            #The if statement is meant to prevent Dict Key errors when a patient's recovery time 
+            #is so long as to exceed the number of available holdingBay slots.
+            #However it doesn't quite work and instead I've increased the number of holding bay
+            #slots to prevent this error
+            #if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
+            for j in range(int(numPostSlots)):
+                holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            #else:
+            #  for j in range(int(HBCloseTime*multiple)):
+            #      holdingBays[postHoldingStartRound+(j*fraction)] += 1
             
             return True
 
