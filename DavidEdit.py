@@ -422,7 +422,7 @@ class TimePeriod:
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
 
             for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(j*fraction)] += 1
+                holdingBays[postHoldingStartRound+(i*fraction)] += 1
             
             return True
 
@@ -673,7 +673,7 @@ class TimePeriod:
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
 
             for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(j*fraction)] += 1
+                holdingBays[postHoldingStartRound+(i*fraction)] += 1
             
             return True
 
@@ -1012,7 +1012,7 @@ if __name__ == "__main__":
     totalTimeRoom = 10.58*60    # total time available in a room per day (min)
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
-    labStartTime = 8          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
+    labStartTime = 8.0          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
     numEPRooms = 3              # number of EP rooms available per day
@@ -1034,8 +1034,8 @@ if __name__ == "__main__":
     # UNCOMMENT the week pairing policy you want to implement
     #weekPairs = True            # will schedule same week procedures across a two week span
     weekPairs = False           # will schedule same week procedures during their original one week span
-    #dayPairs = True
-    dayPairs = False
+    dayPairs = True
+    #dayPairs = False
 
 
     # UNCOMMENT the same day/same week policy you want to implement
@@ -1045,12 +1045,12 @@ if __name__ == "__main__":
 
     # UNCOMMENT the post procedure time policy you want to implement
     #postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
-    postProcRandom = False      # will use the post procedure time specified in the input data
-    #desiredMean = 3.0           # in hours
-    #desiredStDev= 0.25          # in hours
+    #postProcRandom = False      # will use the post procedure time specified in the input data
+    desiredMean = 4.0           # in hours
+    desiredStDev= 0.25          # in hours
 
     # SPECIFY the resolution for holding bay times
-    resolution = 30.0           # in minutes
+    resolution = 15.0           # in minutes
 
     # UNCOMMENT the placement priority you want to implement
     #priority = 'shortest'
@@ -1072,7 +1072,7 @@ if __name__ == "__main__":
     iPreTime = 6                # index: The amount of pre-procedure holding time needed (minutes)
     iPostTime = 7               # index: The amount of post-procedure holding time needed (minutes)
     
-    daysInPeriod = 125          # integer: Number of days in period
+    daysInPeriod = 1          # integer: Number of days in period
     
     roomConstraint = {0.0:'Cath', 1.0:'EP', 2.0:'either'}
                                 # room constraint key used in data file
@@ -1087,14 +1087,15 @@ if __name__ == "__main__":
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathFlatEPFlat.csv'
     #fileName= 'InputData/CathFlatEPGrow1.csv'
-    fileName= 'InputData/CathFlatEPGrow2Test.csv'
+    #fileName= 'InputData/CathFlatEPGrow2.csv'
     #fileName= 'InputData/CathDrop1EPFlat.csv'
     #fileName= 'InputData/CathDrop1EPGrow1.csv'
     #fileName= 'InputData/CathDrop1EPGrow2.csv'
     #fileName= 'InputData/CathDrop2EPFlat.csv'
     #fileName= 'InputData/CathDrop2EPGrow1.csv'
     #fileName= 'InputData/CathDrop2EPGrow2.csv'
-    #fileName = 'InputData/TestInput.csv'
+
+    fileName = 'InputData/TestInput.csv'
 
 
     ###### information regarding the name/location of the output data ######

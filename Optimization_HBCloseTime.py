@@ -75,7 +75,7 @@ class TimePeriod:
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
         multiple = 60.0/resolution
-        holdingBays = {i/multiple:0 for i in xrange(0,int(24*multiple))}
+        holdingBays = {i/multiple:0 for i in xrange(0,int(HBCloseTime*multiple))}
         procsNotPlaced = []
 
         self.dayBins = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms),copy.deepcopy(procsNotPlaced),copy.deepcopy(holdingBays)] for i in xrange(days)]
@@ -157,6 +157,8 @@ class TimePeriod:
                         weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
                         weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]),reverse=True)
+                    elif priority == 'HBConstraints':
+                        weeksProcs.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)  
                     self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
                 # pair week's procedures with the following week's and schedule over two week span
                 else:
@@ -171,6 +173,8 @@ class TimePeriod:
                     weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                 elif priority == 'longest':
                     weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
+                elif priority == 'HBConstraints':
+                    weeksProcs.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                  
                 self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
         
         # schedule SAME DAY procedures in a two day span (M,T/W,R/F)
@@ -186,6 +190,8 @@ class TimePeriod:
                         daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
                         daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
+                    elif priority == 'HBConstraints':
+                        daysSameDays.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                        
                     self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 # Tuesday/Thursday: should be paired
                 else:
@@ -194,6 +200,8 @@ class TimePeriod:
                         twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
                         twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
+                    elif priority == 'HBConstraints':
+                        twoDaysProcs.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                     
                     self.packBinsForDay(d-1,twoDaysProcs,restrictDays,True)
         # schedule same day procedures in a one day span 
         else:
@@ -203,6 +211,8 @@ class TimePeriod:
                     daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                 elif priority == 'longest':
                     daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
+                elif priority == 'HBConstraints':
+                    daysSameDays.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                   
                 self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 
 
@@ -213,6 +223,8 @@ class TimePeriod:
                 daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
             elif priority == 'longest':
                 daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
+            elif priority == 'HBConstraints':
+                daysEmergencies.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                 
             self.packBinsForDay(d-1,daysEmergencies,restrictEmergencies,False)
             
                 
@@ -421,8 +433,12 @@ class TimePeriod:
             for i in range(int(numPreSlots)):
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
 
-            for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
+              for j in range(int(numPostSlots)):
+                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            else:
+              for j in range(int(HBCloseTime*multiple)):
+                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
             
             return True
 
@@ -671,9 +687,13 @@ class TimePeriod:
 
             for i in range(int(numPreSlots)):
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
-
-            for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            
+            if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
+              for j in range(int(numPostSlots)):
+                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
+            else:
+              for j in range(int(HBCloseTime*multiple)):
+                  holdingBays[postHoldingStartRound+(j*fraction)] += 1
             
             return True
 
@@ -977,7 +997,7 @@ def saveHoldingBayResults(timePeriod,workbook):
     writer = csv.writer(out)
 
     multiple = 60.0/resolution
-    times = [i/multiple for i in xrange(int(24*multiple))]
+    times = [i/multiple for i in xrange(int(HBCloseTime*multiple))]
     columns = ["Day"]
     for time in times:
         hours = math.floor(time)
@@ -1012,13 +1032,13 @@ if __name__ == "__main__":
     totalTimeRoom = 10.58*60    # total time available in a room per day (min)
     closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
-    labStartTime = 8          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
+    labStartTime = 6          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 3              # number of EP rooms available per day
+    numEPRooms = 4              # number of EP rooms available per day
     
     numRestrictedCath = 5       # default to no reserved rooms for emergencies
-    numRestrictedEP = 3         # default to no reserved rooms for emergencies
+    numRestrictedEP = 4         # default to no reserved rooms for emergencies
     restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
     restrictDays = True         # whether or not to restrict the same day procedures to the number of restricted rooms
     restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
@@ -1043,19 +1063,23 @@ if __name__ == "__main__":
     #sameDaysOnly = False        # will shedule procedures based on their scheduling horizon
 
 
-    # UNCOMMENT the post procedure time policy you want to implement
+    # Information for holding bays
+    #UNCOMMENT the post procedure time policy you want to implement
     #postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
     postProcRandom = False      # will use the post procedure time specified in the input data
     #desiredMean = 3.0           # in hours
     #desiredStDev= 0.25          # in hours
+    #Set the number of hours in the day after which the holding bays should close:
+    HBCloseTime = 30            #Default is 24
 
     # SPECIFY the resolution for holding bay times
-    resolution = 30.0           # in minutes
+    resolution = 15.0           # in minutes
 
     # UNCOMMENT the placement priority you want to implement
     #priority = 'shortest'
-    priority = 'longest'
+    #priority = 'longest'
     #priority = 'none'
+    priority = 'HBConstraints'
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -1087,7 +1111,7 @@ if __name__ == "__main__":
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathFlatEPFlat.csv'
     #fileName= 'InputData/CathFlatEPGrow1.csv'
-    fileName= 'InputData/CathFlatEPGrow2Test.csv'
+    fileName= 'InputData/CathFlatEPGrow2.csv'
     #fileName= 'InputData/CathDrop1EPFlat.csv'
     #fileName= 'InputData/CathDrop1EPGrow1.csv'
     #fileName= 'InputData/CathDrop1EPGrow2.csv'
