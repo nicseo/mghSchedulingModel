@@ -114,6 +114,11 @@ class TimePeriod:
 
         allProcs = procedures[:]
 
+        # add procedure ID's
+        for i in xrange(len(allProcs)):
+            proc = procedures[i]
+            proc.append(i)
+
         if algType == "NoCrossovers":
             
             # change all the procedure rooms to the original lab only
@@ -891,21 +896,53 @@ def getOptimizedTimeOnly(optimized):
     Returns: a copy of the same input list, but only including procedure times
     '''
 
-    optimizedCopy = optimized[:]
+    optimizedCopy = copy.deepcopy(optimized)
 
-    for d in xrange(len(optimized)):
-        Cath = optimized[d][0]
-        EP = optimized[d][1]
-        overCapacity = optimized[d][2]
+    for d in xrange(len(optimizedCopy)):
+        Cath = optimizedCopy[d][0]
+        EP = optimizedCopy[d][1]
+        overCapacity = optimizedCopy[d][2]
         for c in xrange(numCathRooms):
             day = Cath[c]
-            timesOnly = [x[iProcTime] for x in day]
+            #print "Cath procs: "+str(day)
+            timesOnly = [round(x[iProcTime],2) for x in day]
             Cath[c] = timesOnly
         for e in xrange(numEPRooms):
             day = EP[e]
-            timesOnly = [x[iProcTime] for x in day]
+            #print "EP procs: "+str(day)
+            timesOnly = [round(x[iProcTime],2)  for x in day]
             EP[e] = timesOnly
-        optimized[d][2] = [x[iProcTime] for x in overCapacity]
+        optimizedCopy[d][2] = [round(x[iProcTime],2) for x in overCapacity]
+    return optimizedCopy
+
+def getOptimizedTimeAndIDOnly(optimized):
+    '''
+    Based on a list of optimized scheduling, filter out irrelevant information and only
+    include the procedure times and procedure ID.
+    Input: optimized (a list, with each element corresponding to 1 day of scheduled procedures.
+                Each element itself is a list, consisting of a dictionary with Cath rooms
+                and their assigned procedures, a dictionary with EP rooms and their
+                assigned procedures, and a list of procedures that went over capacity.
+                This should be the output of packBins(procedures)
+    Returns: a copy of the same input list, but only including procedure times and ID
+    '''
+
+    optimizedCopy = copy.deepcopy(optimized)
+
+    for d in xrange(len(optimizedCopy)):
+        Cath = optimizedCopy[d][0]
+        EP = optimizedCopy[d][1]
+        overCapacity = optimizedCopy[d][2]
+        for c in xrange(numCathRooms):
+            day = Cath[c]
+            timeIDOnly = [(x[ID],round(x[iProcTime],2) ) for x in day]
+            Cath[c] = timeIDOnly
+        for e in xrange(numEPRooms):
+            day = EP[e]
+            timeIDOnly = [(x[ID],round(x[iProcTime],2) ) for x in day]
+            EP[e] = timeIDOnly
+        optimizedCopy[d][2] = [(x[ID],round(x[iProcTime],2)) for x in overCapacity]
+        
     return optimizedCopy
 
 
@@ -989,12 +1026,12 @@ def saveSchedulingResults(cleanOptimizedTimeOnly,workbook):
         # write room-procedure/overflow-procedure information
         for cath in xrange(numCathRooms):
             for proc in xrange(1,maxNumCathProcs+1):
-                day.append(str(round(cleanOptimizedTimeOnly[d-1][0][cath][proc-1],2)))
+                day.append(str(cleanOptimizedTimeOnly[d-1][0][cath][proc-1]))
         for ep in xrange(numEPRooms):
             for proc in xrange(1,maxNumEPProcs+1):
-                day.append(str(round(cleanOptimizedTimeOnly[d-1][1][ep][proc-1],2)))
+                day.append(str(cleanOptimizedTimeOnly[d-1][1][ep][proc-1]))
         for o in xrange(1,numOverflowColumns+1):
-            day.append(str(round(cleanOptimizedTimeOnly[d-1][2][o-1],2)))
+            day.append(str(cleanOptimizedTimeOnly[d-1][2][o-1]))
         data.append(day)
     writer.writerows(data)
 
@@ -1043,10 +1080,10 @@ if __name__ == "__main__":
     labStartTime = 8          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 4              # number of EP rooms available per day
+    numEPRooms = 3              # number of EP rooms available per day
     
     numRestrictedCath = 5       # default to no reserved rooms for emergencies
-    numRestrictedEP = 4         # default to no reserved rooms for emergencies
+    numRestrictedEP = 3         # default to no reserved rooms for emergencies
     restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
     restrictDays = True         # whether or not to restrict the same day procedures to the number of restricted rooms
     restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
@@ -1084,10 +1121,10 @@ if __name__ == "__main__":
     resolution = 15.0           # in minutes
 
     # UNCOMMENT the placement priority you want to implement
-    #priority = 'shortest'
+    priority = 'shortest'
     #priority = 'longest'
     #priority = 'none'
-    priority = 'HBConstraints'
+    #priority = 'HBConstraints'
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -1103,6 +1140,7 @@ if __name__ == "__main__":
     iProvider = 9               # index: Provider key
     iPreTime = 6                # index: The amount of pre-procedure holding time needed (minutes)
     iPostTime = 7               # index: The amount of post-procedure holding time needed (minutes)
+    ID = numEntries             # index: The procedure ID
     
     daysInPeriod = 125          # integer: Number of days in period
     
@@ -1113,8 +1151,8 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathFlatEPFlat.csv'
@@ -1126,6 +1164,7 @@ if __name__ == "__main__":
     #fileName= 'InputData/CathDrop2EPFlat.csv'
     #fileName= 'InputData/CathDrop2EPGrow1.csv'
     #fileName= 'InputData/CathDrop2EPGrow2.csv'
+    
     #fileName = 'InputData/TestInput.csv'
 
 
@@ -1134,9 +1173,10 @@ if __name__ == "__main__":
     
     # please name the workbook to save the primary output to
     mainWorkbook = "schedule.csv"
+    detailedWorkbook = "detailedSchedule.csv"
 
     # please name the workbook to save the holding bay output to
-    holdingBayWorkbook = "holdingBay.csv"    
+    holdingBayWorkbook = "HB_ShortestPriority_CathFlatEPGrow2.csv"    
 
 
     ############# RUNNING OF THE SCRIPT: not necessary to modify #############
@@ -1150,7 +1190,10 @@ if __name__ == "__main__":
     timePeriod.packBins(procedures,crossoverType,weekPairs,dayPairs)
 
     ###### output summary statistics ######
+    
     minutes = timePeriod.getProcsByMinuteVolume(procedures)
+    for x in xrange(6):
+        minutes[x] = round(minutes[x],2)
     print "\tBREAKDOWN BY MINUTES"
     print "\tSame week flex: "+str(minutes[4])+" minutes"
     print "\tSame week inflex: "+str(minutes[5])+" minutes"
@@ -1177,12 +1220,16 @@ if __name__ == "__main__":
     #print "Days with overflow: "+str(timePeriod.overflowDays)
     minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
     print "\tBREAKDOWN BY MINUTES PLACED"
-    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("#+str(round((minutesPlaced[4]/(minutes[4])*100+0.001),2))+"%)"
-    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("#+str(round((minutesPlaced[5]/(minutes[5])*100+0.01),2))+"%)"
-    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("#+str(round((minutesPlaced[2]/(minutes[2])*100+0.001),2))+"%)"
-    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("#+str(round((minutesPlaced[3]/(minutes[3])*100+0.001),2))+"%)"
-    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("#+str(round((minutesPlaced[0]/(minutes[0]+0.001))*100,2))+"%)"
-    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("#+str(round((minutesPlaced[1]/(minutes[1]+0.001))*100,2))+"%)"+"\n"
+    modifiedMinutes = [0]*6
+    for x in xrange(6):
+        minutesPlaced[x] = round(minutesPlaced[x],2)
+        modifiedMinutes[x] = 100 if minutes[x]==0 else minutes[x]
+    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/(modifiedMinutes[4])*100),2))+"%)"
+    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/(modifiedMinutes[5])*100),2))+"%)"
+    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/(modifiedMinutes[2])*100),2))+"%)"
+    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/(modifiedMinutes[3])*100),2))+"%)"
+    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/(modifiedMinutes[0])*100),2))+"%)"
+    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(modifiedMinutes[1])*100),2))+"%)"+"\n"
     
     print "*********CROSSOVER STATS*********"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
@@ -1199,10 +1246,15 @@ if __name__ == "__main__":
     
     ###### process results ######
     optimized = copy.deepcopy(timePeriod.dayBins)
+    
     optimizedTimeOnly = getOptimizedTimeOnly(optimized)             # only look at proc times
-    cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
+    cleanedOptimizedTime = cleanResults(optimizedTimeOnly)              # format results for excel
+
+    optimizedTimeAndIDOnly = getOptimizedTimeAndIDOnly(optimized)
+    cleanedOptimizedTimeID = cleanResults(optimizedTimeAndIDOnly)
 
     ###### save results ######
     saveHoldingBayResults(timePeriod,holdingBayWorkbook)
-    saveSchedulingResults(cleanedOptimized,mainWorkbook)
+    saveSchedulingResults(cleanedOptimizedTime,mainWorkbook)
+    saveSchedulingResults(cleanedOptimizedTimeID,detailedWorkbook)
 
