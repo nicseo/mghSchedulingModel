@@ -1121,10 +1121,10 @@ if __name__ == "__main__":
     resolution = 15.0           # in minutes
 
     # UNCOMMENT the placement priority you want to implement
-    priority = 'shortest'
+    #priority = 'shortest'
     #priority = 'longest'
     #priority = 'none'
-    #priority = 'HBConstraints'
+    priority = 'HBConstraints'
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -1176,7 +1176,7 @@ if __name__ == "__main__":
     detailedWorkbook = "detailedSchedule.csv"
 
     # please name the workbook to save the holding bay output to
-    holdingBayWorkbook = "HB_ShortestPriority_CathFlatEPGrow2.csv"    
+    holdingBayWorkbook = "HB_HBPriority_CathFlatEPGrow2.csv"    
 
 
     ############# RUNNING OF THE SCRIPT: not necessary to modify #############
@@ -1255,6 +1255,6 @@ if __name__ == "__main__":
 
     ###### save results ######
     saveHoldingBayResults(timePeriod,holdingBayWorkbook)
-    saveSchedulingResults(cleanedOptimizedTime,mainWorkbook)
-    saveSchedulingResults(cleanedOptimizedTimeID,detailedWorkbook)
+    #saveSchedulingResults(cleanedOptimizedTime,mainWorkbook)
+    #saveSchedulingResults(cleanedOptimizedTimeID,detailedWorkbook)
 
