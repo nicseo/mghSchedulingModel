@@ -19,7 +19,8 @@ efficient scheduling for the combined labs.
 Note: Drops all non-primetime procedures
 """
 
-setwd("/Users/dscheink/Documents/MIT-MGH/EP_Cath/R_PythonAnalysis/Joint Unit Model/ReModifiedAlgorithm")
+#setwd("/Users/dscheink/Documents/MIT-MGH/EP_Cath/R_PythonAnalysis/Joint Unit Model/ReModifiedAlgorithm")
+setwd("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script/RScriptsAndData")
 
 ################### CATH ######################
 
