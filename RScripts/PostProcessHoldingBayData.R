@@ -1,4 +1,4 @@
-HoldingBay = read.csv("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script/Python Output Data/HB_LongestPriority_CathFlatEPGrow2.csv")
+HoldingBay = read.csv("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/holdingBay.csv")
 
 Resolution = 15
 
