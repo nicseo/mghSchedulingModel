@@ -75,7 +75,7 @@ class TimePeriod:
         CathRooms = {i:[] for i in xrange(numCathRooms)}
         EPRooms = {i:[] for i in xrange(numEPRooms)}
         multiple = 60.0/resolution
-        holdingBays = {i/multiple:0 for i in xrange(0,int(HBCloseTime*multiple))}
+        holdingBays = {i/multiple:0 for i in xrange(0,int(24*multiple))}
         procsNotPlaced = []
 
         self.dayBins = [[copy.deepcopy(CathRooms),copy.deepcopy(EPRooms),copy.deepcopy(procsNotPlaced),copy.deepcopy(holdingBays)] for i in xrange(days)]
@@ -113,11 +113,6 @@ class TimePeriod:
         '''
 
         allProcs = procedures[:]
-
-        # add procedure ID's
-        for i in xrange(len(allProcs)):
-            proc = procedures[i]
-            proc.append(i)
 
         if algType == "NoCrossovers":
             
@@ -162,8 +157,6 @@ class TimePeriod:
                         weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
                         weeksProcs.sort(lambda x,y:cmp(x[iProcTime],y[iProcTime]),reverse=True)
-                    elif priority == 'HBConstraints':
-                        weeksProcs.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)  
                     self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
                 # pair week's procedures with the following week's and schedule over two week span
                 else:
@@ -178,8 +171,6 @@ class TimePeriod:
                     weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                 elif priority == 'longest':
                     weeksProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
-                elif priority == 'HBConstraints':
-                    weeksProcs.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                  
                 self.packBinsForWeek(w-1,weeksProcs,restrictWeeks,False)
         
         # schedule SAME DAY procedures in a two day span (M,T/W,R/F)
@@ -195,8 +186,6 @@ class TimePeriod:
                         daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
                         daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
-                    elif priority == 'HBConstraints':
-                        daysSameDays.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                        
                     self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 # Tuesday/Thursday: should be paired
                 else:
@@ -205,8 +194,6 @@ class TimePeriod:
                         twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                     elif priority == 'longest':
                         twoDaysProcs.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
-                    elif priority == 'HBConstraints':
-                        twoDaysProcs.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                     
                     self.packBinsForDay(d-1,twoDaysProcs,restrictDays,True)
         # schedule same day procedures in a one day span 
         else:
@@ -216,8 +203,6 @@ class TimePeriod:
                     daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
                 elif priority == 'longest':
                     daysSameDays.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
-                elif priority == 'HBConstraints':
-                    daysSameDays.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                   
                 self.packBinsForDay(d-1,daysSameDays,restrictDays,False)
                 
 
@@ -228,8 +213,6 @@ class TimePeriod:
                 daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]))
             elif priority == 'longest':
                 daysEmergencies.sort(lambda x,y: cmp(x[iProcTime],y[iProcTime]),reverse=True)
-            elif priority == 'HBConstraints':
-                daysEmergencies.sort(lambda x,y: cmp(x[iPostTime],y[iPostTime]),reverse=True)                 
             self.packBinsForDay(d-1,daysEmergencies,restrictEmergencies,False)
             
                 
@@ -437,17 +420,9 @@ class TimePeriod:
 
             for i in range(int(numPreSlots)):
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
-                
-            #The if statement is meant to prevent Dict Key errors when a patient's recovery time 
-            #is so long as to exceed the number of available holdingBay slots.
-            #However it doesn't quite work and instead I've increased the number of holding bay
-            #slots to prevent this error
-            #if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
+
             for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(j*fraction)] += 1
-            #else:
-            #  for j in range(int(HBCloseTime*multiple)):
-            #      holdingBays[postHoldingStartRound+(j*fraction)] += 1
+                holdingBays[postHoldingStartRound+(i*fraction)] += 1
             
             return True
 
@@ -696,17 +671,9 @@ class TimePeriod:
 
             for i in range(int(numPreSlots)):
                 holdingBays[preHoldingStartRound+(i*fraction)] += 1
-            
-            #The if statement is meant to prevent Dict Key errors when a patient's recovery time 
-            #is so long as to exceed the number of available holdingBay slots.
-            #However it doesn't quite work and instead I've increased the number of holding bay
-            #slots to prevent this error
-            #if postHoldingStartRound+(int(numPostSlots)*fraction) <= int(HBCloseTime*multiple):
+
             for j in range(int(numPostSlots)):
-                holdingBays[postHoldingStartRound+(j*fraction)] += 1
-            #else:
-            #  for j in range(int(HBCloseTime*multiple)):
-            #      holdingBays[postHoldingStartRound+(j*fraction)] += 1
+                holdingBays[postHoldingStartRound+(i*fraction)] += 1
             
             return True
 
@@ -896,53 +863,21 @@ def getOptimizedTimeOnly(optimized):
     Returns: a copy of the same input list, but only including procedure times
     '''
 
-    optimizedCopy = copy.deepcopy(optimized)
+    optimizedCopy = optimized[:]
 
-    for d in xrange(len(optimizedCopy)):
-        Cath = optimizedCopy[d][0]
-        EP = optimizedCopy[d][1]
-        overCapacity = optimizedCopy[d][2]
+    for d in xrange(len(optimized)):
+        Cath = optimized[d][0]
+        EP = optimized[d][1]
+        overCapacity = optimized[d][2]
         for c in xrange(numCathRooms):
             day = Cath[c]
-            #print "Cath procs: "+str(day)
-            timesOnly = [round(x[iProcTime],2) for x in day]
+            timesOnly = [x[iProcTime] for x in day]
             Cath[c] = timesOnly
         for e in xrange(numEPRooms):
             day = EP[e]
-            #print "EP procs: "+str(day)
-            timesOnly = [round(x[iProcTime],2)  for x in day]
+            timesOnly = [x[iProcTime] for x in day]
             EP[e] = timesOnly
-        optimizedCopy[d][2] = [round(x[iProcTime],2) for x in overCapacity]
-    return optimizedCopy
-
-def getOptimizedTimeAndIDOnly(optimized):
-    '''
-    Based on a list of optimized scheduling, filter out irrelevant information and only
-    include the procedure times and procedure ID.
-    Input: optimized (a list, with each element corresponding to 1 day of scheduled procedures.
-                Each element itself is a list, consisting of a dictionary with Cath rooms
-                and their assigned procedures, a dictionary with EP rooms and their
-                assigned procedures, and a list of procedures that went over capacity.
-                This should be the output of packBins(procedures)
-    Returns: a copy of the same input list, but only including procedure times and ID
-    '''
-
-    optimizedCopy = copy.deepcopy(optimized)
-
-    for d in xrange(len(optimizedCopy)):
-        Cath = optimizedCopy[d][0]
-        EP = optimizedCopy[d][1]
-        overCapacity = optimizedCopy[d][2]
-        for c in xrange(numCathRooms):
-            day = Cath[c]
-            timeIDOnly = [(x[ID],round(x[iProcTime],2) ) for x in day]
-            Cath[c] = timeIDOnly
-        for e in xrange(numEPRooms):
-            day = EP[e]
-            timeIDOnly = [(x[ID],round(x[iProcTime],2) ) for x in day]
-            EP[e] = timeIDOnly
-        optimizedCopy[d][2] = [(x[ID],round(x[iProcTime],2)) for x in overCapacity]
-        
+        optimized[d][2] = [x[iProcTime] for x in overCapacity]
     return optimizedCopy
 
 
@@ -1026,12 +961,12 @@ def saveSchedulingResults(cleanOptimizedTimeOnly,workbook):
         # write room-procedure/overflow-procedure information
         for cath in xrange(numCathRooms):
             for proc in xrange(1,maxNumCathProcs+1):
-                day.append(str(cleanOptimizedTimeOnly[d-1][0][cath][proc-1]))
+                day.append(str(round(cleanOptimizedTimeOnly[d-1][0][cath][proc-1],2)))
         for ep in xrange(numEPRooms):
             for proc in xrange(1,maxNumEPProcs+1):
-                day.append(str(cleanOptimizedTimeOnly[d-1][1][ep][proc-1]))
+                day.append(str(round(cleanOptimizedTimeOnly[d-1][1][ep][proc-1],2)))
         for o in xrange(1,numOverflowColumns+1):
-            day.append(str(cleanOptimizedTimeOnly[d-1][2][o-1]))
+            day.append(str(round(cleanOptimizedTimeOnly[d-1][2][o-1],2)))
         data.append(day)
     writer.writerows(data)
 
@@ -1042,7 +977,7 @@ def saveHoldingBayResults(timePeriod,workbook):
     writer = csv.writer(out)
 
     multiple = 60.0/resolution
-    times = [i/multiple for i in xrange(int(HBCloseTime*multiple))]
+    times = [i/multiple for i in xrange(int(24*multiple))]
     columns = ["Day"]
     for time in times:
         hours = math.floor(time)
@@ -1074,16 +1009,16 @@ if __name__ == "__main__":
 
     ###### information regarding the scheduling parameters ######
     
-    totalTimeRoom = 11.58*60    # total time available in a room per day (min)
-    closeCap = 11*60            # time cap for closing a room (min)
+    totalTimeRoom = 10.58*60    # total time available in a room per day (min)
+    closeCap = 10*60            # time cap for closing a room (min)
     turnover = 0                # estimated time for room turnover (min)
-    labStartTime = 8          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
+    labStartTime = 8.0          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 4              # number of EP rooms available per day
+    numEPRooms = 3              # number of EP rooms available per day
     
     numRestrictedCath = 5       # default to no reserved rooms for emergencies
-    numRestrictedEP = 4         # default to no reserved rooms for emergencies
+    numRestrictedEP = 3         # default to no reserved rooms for emergencies
     restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
     restrictDays = True         # whether or not to restrict the same day procedures to the number of restricted rooms
     restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
@@ -1092,15 +1027,15 @@ if __name__ == "__main__":
     ###### information regarding constraint policies ######
     
     # UNCOMMENT the type of crossover policy you want to implement
-    #crossoverType = "LabPreference"    #Allows crossovers as coded in the data, but attempts to place procedures in their own lab
+    crossoverType = "LabPreference"    #Allows crossovers as coded in the data, but attempts to place procedures in their own lab
     #crossoverType = "NoCrossovers"
-    crossoverType = "AllFlex"
+    #crossoverType = "AllFlex"
 
     # UNCOMMENT the week pairing policy you want to implement
     #weekPairs = True            # will schedule same week procedures across a two week span
     weekPairs = False           # will schedule same week procedures during their original one week span
-    #dayPairs = True
-    dayPairs = False
+    dayPairs = True
+    #dayPairs = False
 
 
     # UNCOMMENT the same day/same week policy you want to implement
@@ -1108,23 +1043,19 @@ if __name__ == "__main__":
     #sameDaysOnly = False        # will shedule procedures based on their scheduling horizon
 
 
-    # Information for holding bays
-    #UNCOMMENT the post procedure time policy you want to implement
+    # UNCOMMENT the post procedure time policy you want to implement
     #postProcRandom = True       # will draw the post procedure time from a random distribution with a specified mean and std deviation
-    postProcRandom = False      # will use the post procedure time specified in the input data
-    #desiredMean = 3.0           # in hours
-    #desiredStDev= 0.25          # in hours
-    #Set the number of hours in the day after which the holding bays should close:
-    HBCloseTime = 50            #Default is 24
+    #postProcRandom = False      # will use the post procedure time specified in the input data
+    desiredMean = 4.0           # in hours
+    desiredStDev= 0.25          # in hours
 
     # SPECIFY the resolution for holding bay times
     resolution = 15.0           # in minutes
 
     # UNCOMMENT the placement priority you want to implement
-    priority = 'shortest'
-    #priority = 'longest'
+    #priority = 'shortest'
+    priority = 'longest'
     #priority = 'none'
-    #priority = 'HBConstraints'
 
 
     ###### information regarding the order of information in the data sheet ######
@@ -1140,9 +1071,8 @@ if __name__ == "__main__":
     iProvider = 9               # index: Provider key
     iPreTime = 6                # index: The amount of pre-procedure holding time needed (minutes)
     iPostTime = 7               # index: The amount of post-procedure holding time needed (minutes)
-    ID = numEntries             # index: The procedure ID
     
-    daysInPeriod = 125          # integer: Number of days in period
+    daysInPeriod = 1          # integer: Number of days in period
     
     roomConstraint = {0.0:'Cath', 1.0:'EP', 2.0:'either'}
                                 # room constraint key used in data file
@@ -1164,21 +1094,18 @@ if __name__ == "__main__":
     #fileName= 'InputData/CathDrop2EPFlat.csv'
     #fileName= 'InputData/CathDrop2EPGrow1.csv'
     #fileName= 'InputData/CathDrop2EPGrow2.csv'
-    
-    fileName = 'InputData/TestInputWorstCase.csv'
-    #fileName = 'InputData/TestInputWorstCase.csv'
+
+    fileName = 'InputData/TestInput.csv'
 
 
     ###### information regarding the name/location of the output data ######
     ########## which must be created before running this script ############
     
     # please name the workbook to save the primary output to
-    mainWorkbook = "OutputData/schedule.csv"
-    detailedWorkbook = "OutputData/detailedSchedule.csv"
+    mainWorkbook = "schedule.csv"
 
     # please name the workbook to save the holding bay output to
-    holdingBayWorkbook = "OutputData/holdingBayWC.csv"   
-    #holdingBayWorkbook = "OutputData/HB_ShortestPriority_CathFlatEPGrow2.csv"    
+    holdingBayWorkbook = "holdingBay.csv"    
 
 
     ############# RUNNING OF THE SCRIPT: not necessary to modify #############
@@ -1192,10 +1119,7 @@ if __name__ == "__main__":
     timePeriod.packBins(procedures,crossoverType,weekPairs,dayPairs)
 
     ###### output summary statistics ######
-    
     minutes = timePeriod.getProcsByMinuteVolume(procedures)
-    for x in xrange(6):
-        minutes[x] = round(minutes[x],2)
     print "\tBREAKDOWN BY MINUTES"
     print "\tSame week flex: "+str(minutes[4])+" minutes"
     print "\tSame week inflex: "+str(minutes[5])+" minutes"
@@ -1222,16 +1146,12 @@ if __name__ == "__main__":
     #print "Days with overflow: "+str(timePeriod.overflowDays)
     minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
     print "\tBREAKDOWN BY MINUTES PLACED"
-    modifiedMinutes = [0]*6
-    for x in xrange(6):
-        minutesPlaced[x] = round(minutesPlaced[x],2)
-        modifiedMinutes[x] = 100 if minutes[x]==0 else minutes[x]
-    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/(modifiedMinutes[4])*100),2))+"%)"
-    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/(modifiedMinutes[5])*100),2))+"%)"
-    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/(modifiedMinutes[2])*100),2))+"%)"
-    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/(modifiedMinutes[3])*100),2))+"%)"
-    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/(modifiedMinutes[0])*100),2))+"%)"
-    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(modifiedMinutes[1])*100),2))+"%)"+"\n"
+    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("#+str(round((minutesPlaced[4]/(minutes[4])*100+0.001),2))+"%)"
+    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("#+str(round((minutesPlaced[5]/(minutes[5])*100+0.01),2))+"%)"
+    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("#+str(round((minutesPlaced[2]/(minutes[2])*100+0.001),2))+"%)"
+    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("#+str(round((minutesPlaced[3]/(minutes[3])*100+0.001),2))+"%)"
+    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("#+str(round((minutesPlaced[0]/(minutes[0]+0.001))*100,2))+"%)"
+    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("#+str(round((minutesPlaced[1]/(minutes[1]+0.001))*100,2))+"%)"+"\n"
     
     print "*********CROSSOVER STATS*********"
     print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
@@ -1248,15 +1168,10 @@ if __name__ == "__main__":
     
     ###### process results ######
     optimized = copy.deepcopy(timePeriod.dayBins)
-    
     optimizedTimeOnly = getOptimizedTimeOnly(optimized)             # only look at proc times
-    cleanedOptimizedTime = cleanResults(optimizedTimeOnly)              # format results for excel
-
-    optimizedTimeAndIDOnly = getOptimizedTimeAndIDOnly(optimized)
-    cleanedOptimizedTimeID = cleanResults(optimizedTimeAndIDOnly)
+    cleanedOptimized = cleanResults(optimizedTimeOnly)              # format results for excel
 
     ###### save results ######
     saveHoldingBayResults(timePeriod,holdingBayWorkbook)
-    saveSchedulingResults(cleanedOptimizedTime,mainWorkbook)
-    saveSchedulingResults(cleanedOptimizedTimeID,detailedWorkbook)
+    saveSchedulingResults(cleanedOptimized,mainWorkbook)
 
