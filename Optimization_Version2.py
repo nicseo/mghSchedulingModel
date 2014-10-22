@@ -908,13 +908,13 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
-    fileName= 'InputData/CathFlatEPFlat.csv'
+    #fileName= 'InputData/CathFlatEPFlat.csv'
     #fileName= 'InputData/CathFlatEPGrow1.csv'
-    #fileName= 'InputData/CathFlatEPGrow2.csv'
+    fileName= 'InputData/CathFlatEPGrow2.csv'
     #fileName= 'InputData/CathDrop1EPFlat.csv'
     #fileName= 'InputData/CathDrop1EPGrow1.csv'
     #fileName= 'InputData/CathDrop1EPGrow2.csv'
@@ -929,11 +929,11 @@ if __name__ == "__main__":
     ########## which must be created before running this script ############
     
     # please name the workbook to save the primary output to
-    mainWorkbook = "scheduleV2.csv"
-    detailedWorkbook = "detailedScheduleV2.csv"
+    mainWorkbook = "OutputData/scheduleV2.csv"
+    detailedWorkbook = "OutputData/detailedScheduleV2.csv"
 
     # please name the workbook to save the holding bay output to
-    holdingBayWorkbook = "holdingBaysV2.csv"    
+    holdingBayWorkbook = "OutputData/holdingBaysV2.csv"    
 
 
     ############# RUNNING OF THE SCRIPT: not necessary to modify #############
