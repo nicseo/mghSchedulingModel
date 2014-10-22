@@ -88,17 +88,21 @@ class TimePeriod:
         self.numDays = days
         self.numWeeks = days/5
         self.labStartTime = labStartTime
+        self.numTotalProcs = None
+        self.numSameDays = None
+        self.numSameWeeks = None
+        self.numEmergencies = None
 
         # statistical counters
         self.procsPlaced = 0
-##        self.procsPlacedData = []
-##        self.crossOverProcs = 0
-##        self.cathToEP = 0           # procedures historically done in Cath that are scheduled in an EP room
-##        self.epToCath = 0           # procedures historically done in EP that are scheduled in a Cath room
+        self.procsPlacedData = []
+        self.crossOverProcs = 0
+        self.cathToEP = 0           # procedures historically done in Cath that are scheduled in an EP room
+        self.epToCath = 0           # procedures historically done in EP that are scheduled in a Cath room
         self.overflowCath = 0
         self.overflowEP = 0
-##        self.overflowWeeks = []
-##        self.overflowDays = []
+        self.overflowWeeks = []
+        self.overflowDays = []
         
 
     ##################################### BIN PACKING FOR #####################################
@@ -137,11 +141,10 @@ class TimePeriod:
         sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
         sameWeek = [x for x in allProcs if x[iSchedHorizon]==3.0]
 
-        print "*********PROCEDURE DATA*********"
-        print "Total procedures: "+str(len(emergencies)+len(sameDay)+len(sameWeek))
-        print "Same days: "+str(len(sameDay))
-        print "Same weeks: "+str(len(sameWeek))
-        print "Emergencies: "+str(len(emergencies))
+        self.numTotalProcs = len(emergencies)+len(sameDay)+len(sameWeek)
+        self.numSameDays = len(sameDay)
+        self.numSameWeeks = len(sameWeek)
+        self.numEmergencies = len(emergencies)
         
         # SAME WEEK procedures: two week spans
         if weekPairs:
@@ -281,38 +284,38 @@ class TimePeriod:
 ##        return weeksAverageUtil
 ##        
 ##
-##    def getOverflowWeeksAndProcs(self):
-##        '''
-##        '''
-##
-##        overflowWeeks = 0
-##        for week in self.weekBins:
-##            if len(week[0][2]) > 0:
-##                overflowWeeks += 1
-##                        
-##        overflowProcs = 0
-##        for day in self.dayBins:
-##            overflowProcs += len(day[2])
-##
-##        return (overflowWeeks,overflowProcs)
-##
-##    def getProcsByMinuteVolume(self,allProcs):
-##        '''
-##        '''
-##        emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
-##        sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
-##        sameWeek = [x for x in allProcs if x[iSchedHorizon]==3.0]
-##
-##        emergFlex = [x for x in emergencies if x[iRoom]==2.0]
-##        emergInflex = [x for x in emergencies if x[iRoom]!=2.0]
-##
-##        sameDayFlex = [x for x in sameDay if x[iRoom]==2.0]
-##        sameDayInflex = [x for x in sameDay if x[iRoom]!=2.0]
-##
-##        sameWeekFlex = [x for x in sameWeek if x[iRoom]==2.0]
-##        sameWeekInflex = [x for x in sameWeek if x[iRoom]!=2.0]
-##
-##        return [self.sumProcTimes(x) for x in [emergFlex,emergInflex,sameDayFlex,sameDayInflex,sameWeekFlex,sameWeekInflex]]
+    def getOverflowWeeksAndProcs(self):
+        '''
+        '''
+
+        overflowWeeks = 0
+        for week in self.weekBins:
+            if len(week[0][2]) > 0:
+                overflowWeeks += 1
+                        
+        overflowProcs = 0
+        for day in self.dayBins:
+            overflowProcs += len(day[2])
+
+        return (overflowWeeks,overflowProcs)
+
+    def getProcsByMinuteVolume(self,allProcs):
+        '''
+        '''
+        emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
+        sameDay = [x for x in allProcs if x[iSchedHorizon]==2.0]
+        sameWeek = [x for x in allProcs if x[iSchedHorizon]==3.0]
+
+        emergFlex = [x for x in emergencies if x[iRoom]==2.0]
+        emergInflex = [x for x in emergencies if x[iRoom]!=2.0]
+
+        sameDayFlex = [x for x in sameDay if x[iRoom]==2.0]
+        sameDayInflex = [x for x in sameDay if x[iRoom]!=2.0]
+
+        sameWeekFlex = [x for x in sameWeek if x[iRoom]==2.0]
+        sameWeekInflex = [x for x in sameWeek if x[iRoom]!=2.0]
+
+        return [self.sumProcTimes(x) for x in [emergFlex,emergInflex,sameDayFlex,sameDayInflex,sameWeekFlex,sameWeekInflex]]
 
 
 
@@ -377,12 +380,31 @@ class TimePeriod:
         #  for j in range(int(HBCloseTime*multiple)):
         #      holdingBays[postHoldingStartRound+(j*fraction)] += 1
 
-    def updateOverflowStats(self,procOverflow):
+    def updateOverflowStats(self,procOverflow,dayOrWeek,day=True):
         if procOverflow[iLab] == cathID:
             self.overflowCath += 1
         elif procOverflow[iLab] == epID:
             self.overflowEP += 1
 
+        if (day and dayOrWeek not in self.overflowDays):
+            self.overflowDays.append(dayOrWeek)
+        elif (not day and dayOrWeek not in self.overflowWeeks):
+            self.overflowWeeks.append(dayOrWeek)
+
+    def updateProcsPlacedStats(self,procedure):
+        self.procsPlaced += 1
+        self.procsPlacedData.append(procedure)
+
+    def updateCrossoverStats(self,procedure,placedLabID):
+        originalLab = procedure[iLab]
+        if originalLab != placedLabID:
+            self.crossOverProcs += 1
+            if originalLab == cathID:
+                self.cathToEP += 1
+            else:
+                self.epToCath += 1
+        
+        
 
     ##################################### DAY BY DAY PACKING #####################################
     ################################### EMERGENCIES/SAME DAYS ####################################
@@ -449,7 +471,7 @@ class TimePeriod:
         # push to overflow: if there are still no room choices
         if len(procDomain) == 0:
             self.bins[1][day].append(procedure)
-            self.updateOverflowStats(procedure)
+            self.updateOverflowStats(procedure,day,day=True)
         # schedule procedure: add the procedure to the room with the shortest amount of time already scheduled
         else:
             procDomainList = list(procDomain)
@@ -457,7 +479,8 @@ class TimePeriod:
             toBeBooked = ascending.pop(0)
             roomToBeBooked = self.bins[0][toBeBooked]
             roomToBeBooked.append(procedure)
-            self.procsPlaced += 1
+            self.updateProcsPlacedStats(procedure)
+            self.updateCrossoverStats(procedure,toBeBooked[1])
             self.updateHoldingBays(procedure,toBeBooked[0],roomToBeBooked)
                                 
 
@@ -531,8 +554,8 @@ class TimePeriod:
             procDomain = self.eliminateRoomsByTimeLimit(procDomain,procedure)
         # push to overflow: if there are still no room choices
         if len(procDomain) == 0:
-            self.bins[1][day].append(procedure)
-            self.updateOverflowStats(procedure)
+            self.bins[1][weekStart].append(procedure)
+            self.updateOverflowStats(procedure,week,day=False)
         # schedule procedure: add the procedure to the room with the shortest amount of time already scheduled
         else:
             procDomainList = list(procDomain)
@@ -540,7 +563,8 @@ class TimePeriod:
             toBeBooked = ascending.pop(0)
             roomToBeBooked = self.bins[0][toBeBooked]
             roomToBeBooked.append(procedure)
-            self.procsPlaced += 1
+            self.updateProcsPlacedStats(procedure)
+            self.updateCrossoverStats(procedure,toBeBooked[1])
             self.updateHoldingBays(procedure,toBeBooked[0],roomToBeBooked)
                         
 
@@ -758,52 +782,63 @@ def saveHoldingBayResults(timePeriod,workbook):
 
     writer.writerows(data)
 
-##def printOutputStatistics(timePeriod):
-##    
-##    minutes = timePeriod.getProcsByMinuteVolume(procedures)
-##    for x in xrange(6):
-##        minutes[x] = round(minutes[x],2)
-##    print "\tBREAKDOWN BY MINUTES"
-##    print "\tSame week flex: "+str(minutes[4])+" minutes"
-##    print "\tSame week inflex: "+str(minutes[5])+" minutes"
-##    print "\tSame day flex: "+str(minutes[2])+" minutes"
-##    print "\tSame day inflex: "+str(minutes[3])+" minutes"
-##    print "\tEmergency flex: "+str(minutes[0])+" minutes"
-##    print "\tEmergency inflex: "+str(minutes[1])+" minutes"+"\n"
-##
-##    print "*********PARAMETERS*********"
-##    print "Cath rooms: "+str(numCathRooms)
-##    print "EP rooms: "+str(numEPRooms)
-##    print "Cath rooms used for non-emergencies: "+str(numRestrictedCath)
-##    print "EP rooms used for non-emergencies: "+str(numRestrictedEP)
-##    print "Crossover policy: "+str(crossoverType)
-##    print "Pair weeks for scheduling? "+str(weekPairs)+"\n"
-##    
-##    print "*********OVERFLOW STATS*********"
-##    print "Total of "+str(timePeriod.procsPlaced)+" procedures placed"
+def printOutputStatistics(timePeriod):
+
+    print "*********PARAMETERS*********"
+    print "Cath rooms: "+str(numCathRooms)
+    print "EP rooms: "+str(numEPRooms)
+    print "Cath rooms used for non-emergencies: "+str(numRestrictedCath)
+    print "EP rooms used for non-emergencies: "+str(numRestrictedEP)
+    print "Crossover policy: "+str(crossoverType)
+    print "Pair weeks for scheduling? "+str(weekPairs)
+    print "Pair days for scheduling? "+str(dayPairs)
+    print "Schedule all procedures on same day as historically? "+str(sameDaysOnly)
+    print "Placement priority: "+str(priority)
+    print "Post procedure determination random? "+str(postProcRandom)+"\n"
+
+    print "*********PROCEDURE DATA*********"
+    print "Total procedures: "+str(timePeriod.numTotalProcs)
+    print "Same days: "+str(timePeriod.numSameDays)
+    print "Same weeks: "+str(timePeriod.numSameWeeks)
+    print "Emergencies: "+str(timePeriod.numEmergencies)
+    minutes = timePeriod.getProcsByMinuteVolume(procedures)
+    for x in xrange(6):
+        minutes[x] = round(minutes[x],2)
+    print "\tBREAKDOWN BY MINUTES"
+    print "\tSame week flex: "+str(minutes[4])+" minutes"
+    print "\tSame week inflex: "+str(minutes[5])+" minutes"
+    print "\tSame day flex: "+str(minutes[2])+" minutes"
+    print "\tSame day inflex: "+str(minutes[3])+" minutes"
+    print "\tEmergency flex: "+str(minutes[0])+" minutes"
+    print "\tEmergency inflex: "+str(minutes[1])+" minutes"+"\n"
+
+    
+    print "*********OVERFLOW STATS*********"
+    print "Total of "+str(timePeriod.procsPlaced)+" procedures placed"
+    print "Total procedures that went to overflow: "+str(timePeriod.overflowCath+timePeriod.overflowEP)
+    print "\tCath overflow: "+str(timePeriod.overflowCath)
+    print "\tEP overflow: "+str(timePeriod.overflowEP)
 ##    print "Overflow weeks: "+str(timePeriod.getOverflowWeeksAndProcs()[0])
 ##    print "Overflow procedures: "+str(timePeriod.getOverflowWeeksAndProcs()[1])
-##    print "Cath overflows: "+str(timePeriod.overflowCath)
-##    print "EP overflows: "+str(timePeriod.overflowEP)
-##    #print "Weeks with overflow: "+str(timePeriod.overflowWeeks)
-##    #print "Days with overflow: "+str(timePeriod.overflowDays)
-##    minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
-##    print "\tBREAKDOWN BY MINUTES PLACED"
-##    modifiedMinutes = [0]*6
-##    for x in xrange(6):
-##        minutesPlaced[x] = round(minutesPlaced[x],2)
-##        modifiedMinutes[x] = 100 if minutes[x]==0 else minutes[x]
-##    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/(modifiedMinutes[4])*100),2))+"%)"
-##    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/(modifiedMinutes[5])*100),2))+"%)"
-##    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/(modifiedMinutes[2])*100),2))+"%)"
-##    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/(modifiedMinutes[3])*100),2))+"%)"
-##    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/(modifiedMinutes[0])*100),2))+"%)"
-##    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(modifiedMinutes[1])*100),2))+"%)"+"\n"
-##    
-##    print "*********CROSSOVER STATS*********"
-##    print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
-##    print "Total number of Cath procedures in EP: "+str(timePeriod.cathToEP)
-##    print "Total number of EP procedures in Cath: "+str(timePeriod.epToCath)+"\n"
+    print "Same week procedures overflow during weeks (0 index): "+str(sorted(timePeriod.overflowWeeks))
+    print "Same day/emergencies overflow during days (0 index): "+str(sorted(timePeriod.overflowDays))
+    minutesPlaced = timePeriod.getProcsByMinuteVolume(timePeriod.procsPlacedData)
+    print "\tBREAKDOWN BY MINUTES PLACED"
+    modifiedMinutes = [0]*6
+    for x in xrange(6):
+        minutesPlaced[x] = round(minutesPlaced[x],2)
+        modifiedMinutes[x] = 100 if minutes[x]==0 else minutes[x]
+    print "\tSame week flex: "+str(minutesPlaced[4])+" out of "+str(minutes[4])+" minutes placed ("+str(round((minutesPlaced[4]/(modifiedMinutes[4])*100),2))+"%)"
+    print "\tSame week inflex: "+str(minutesPlaced[5])+" out of "+str(minutes[5])+" minutes placed ("+str(round((minutesPlaced[5]/(modifiedMinutes[5])*100),2))+"%)"
+    print "\tSame day flex: "+str(minutesPlaced[2])+" out of "+str(minutes[2])+" minutes placed ("+str(round((minutesPlaced[2]/(modifiedMinutes[2])*100),2))+"%)"
+    print "\tSame day inflex: "+str(minutesPlaced[3])+" out of "+str(minutes[3])+" minutes placed ("+str(round((minutesPlaced[3]/(modifiedMinutes[3])*100),2))+"%)"
+    print "\tEmergency flex: "+str(minutesPlaced[0])+" out of "+str(minutes[0])+" minutes placed ("+str(round((minutesPlaced[0]/(modifiedMinutes[0])*100),2))+"%)"
+    print "\tEmergency inflex: "+str(minutesPlaced[1])+" out of "+str(minutes[1])+" minutes placed ("+str(round((minutesPlaced[1]/(modifiedMinutes[1])*100),2))+"%)"+"\n"
+    
+    print "*********CROSSOVER STATS*********"
+    print "Total number of crossover procedures: "+str(timePeriod.crossOverProcs)
+    print "Total number of Cath procedures in EP: "+str(timePeriod.cathToEP)
+    print "Total number of EP procedures in Cath: "+str(timePeriod.epToCath)+"\n"
 ##    
 ##    print "*********UTILIZATION STATS*********"
 ##    cath, ep, avgUtilDay, avgUtilWeek, util = timePeriod.getUtilizationStatistics()
@@ -946,7 +981,7 @@ if __name__ == "__main__":
     timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP,labStartTime)
     timePeriod.packBins(procedures,crossoverType,weekPairs,dayPairs)
 
-##    printOutputStatistics()
+    printOutputStatistics(timePeriod)
     
     ###### process results ######
     optimized = copy.deepcopy(timePeriod.bins)
