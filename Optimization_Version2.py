@@ -70,11 +70,12 @@ class TimePeriod:
         
     '''
     
-    def __init__(self,days,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP,labStartTime):
+    def __init__(self,days,numCathRooms,numEPRooms,numMiddleRooms,numRestrictedCath,numRestrictedEP,labStartTime):
 
         CathRooms = {(d,cathID,i):[] for i in xrange(numCathRooms) for d in xrange(days)}
         EPRooms = {(d,epID,i):[] for i in xrange(numEPRooms) for d in xrange(days)}
-        rooms = dict(CathRooms.items() + EPRooms.items())
+        MiddleRooms = {(d,middleID,i):[] for i in xrange(numMiddleRooms) for d in xrange(days)}
+        rooms = dict(CathRooms.items() + EPRooms.items() + MiddleRooms.items())
         overflow = {d:[] for d in xrange(days)}
         multiple = 60.0/resolution
         holdingBays = {(d,i/multiple):0 for i in xrange(0,int(HBCloseTime*multiple)) for d in xrange(days)}
@@ -83,6 +84,7 @@ class TimePeriod:
 
         self.numCathRooms = numCathRooms
         self.numEPRooms = numEPRooms
+        self.numMiddleRooms = numMiddleRooms
         self.numRestrictedCath = numRestrictedCath
         self.numRestrictedEP = numRestrictedEP
         self.numDays = days
@@ -101,6 +103,7 @@ class TimePeriod:
         self.epToCath = 0           # procedures historically done in EP that are scheduled in a Cath room
         self.overflowCath = 0
         self.overflowEP = 0
+        self.overflowMiddle = 0
         self.overflowWeeks = []
         self.overflowDays = []
         
@@ -123,6 +126,10 @@ class TimePeriod:
         for i in xrange(len(allProcs)):
             proc = procedures[i]
             proc.append(i)
+
+        if emergencyFlex:
+            for proc in allProcs:
+                proc[iRoom] = 2.0 if proc[iSchedHorizon]==1.0 else proc[iRoom]
                 
         if sameDaysOnly:
             # change all same week procedures to same day
@@ -381,7 +388,9 @@ class TimePeriod:
         #      holdingBays[postHoldingStartRound+(j*fraction)] += 1
 
     def updateOverflowStats(self,procOverflow,dayOrWeek,day=True):
-        if procOverflow[iLab] == cathID:
+        if procOverflow[iRoom] == 3.0:
+            self.overflowMiddle += 1
+        elif procOverflow[iLab] == cathID:
             self.overflowCath += 1
         elif procOverflow[iLab] == epID:
             self.overflowEP += 1
@@ -434,6 +443,29 @@ class TimePeriod:
 
         procDomain = set()
 
+        ### STEP 0: screen for middle room procedures ###
+        if procedure[iRoom]==3.0:
+            for r in xrange(self.numMiddleRooms):
+                procDomain.add((day,middleID,r))
+                procDomain.add((day+1,middleID,r)) if paired else None
+            # constrain domain by room time limit
+            procDomain = self.eliminateRoomsByTimeLimit(procDomain,procedure)
+            # push to overflow: no room choices
+            if len(procDomain) == 0:
+                self.bins[1][day].append(procedure)
+                self.updateOverflowStats(procedure,day,day=True)
+            # schedule procedure: add the procedure to the room with the shortest amount of time already scheduled
+            else:
+                procDomainList = list(procDomain)
+                ascending = sorted(procDomainList, key=lambda x:self.sumProcTimes(self.bins[0][x]))
+                toBeBooked = ascending.pop(0)
+                roomToBeBooked = self.bins[0][toBeBooked]
+                roomToBeBooked.append(procedure)
+                self.updateProcsPlacedStats(procedure)
+                self.updateCrossoverStats(procedure,toBeBooked[1])
+                self.updateHoldingBays(procedure,toBeBooked[0],roomToBeBooked)
+            return
+        
         ### STEP 1: get procedure information ###
         originalLab = procedure[iLab]
         otherLab = cathID if originalLab==epID else epID
@@ -513,6 +545,31 @@ class TimePeriod:
         '''
 
         procDomain = set()
+        weekStart = week*5
+
+        ### STEP 0: screen for middle room procedures ###
+        if procedure[iRoom]==3.0:
+            for day in xrange(weekStart,weekStart+5):
+                for r in xrange(self.numMiddleRooms):
+                    procDomain.add((day,middleID,r))
+                    procDomain.add((day+5,middleID,r)) if paired else None
+            # constrain domain by room time limit
+            procDomain = self.eliminateRoomsByTimeLimit(procDomain,procedure)
+            # push to overflow: no room choices
+            if len(procDomain) == 0:
+                self.bins[1][weekStart].append(procedure)
+                self.updateOverflowStats(procedure,week,day=False)
+            # schedule procedure: add the procedure to the room with the shortest amount of time already scheduled
+            else:
+                procDomainList = list(procDomain)
+                ascending = sorted(procDomainList, key=lambda x:self.sumProcTimes(self.bins[0][x]))
+                toBeBooked = ascending.pop(0)
+                roomToBeBooked = self.bins[0][toBeBooked]
+                roomToBeBooked.append(procedure)
+                self.updateProcsPlacedStats(procedure)
+                self.updateCrossoverStats(procedure,toBeBooked[1])
+                self.updateHoldingBays(procedure,toBeBooked[0],roomToBeBooked)
+            return
 
         ### STEP 1: get procedure information ###
         originalLab = procedure[iLab]
@@ -525,7 +582,6 @@ class TimePeriod:
             otherLabRooms = self.numRestrictedCath if originalLab==epID else self.numRestrictedEP
         flex = True if procedure[iRoom]==2.0 else False
         duration = procedure[iProcTime]
-        weekStart = week*5
 
         ### STEP 2: establish initial domain (room choices) ###
         # initial domain is the original lab's rooms for all crossover policies
@@ -869,10 +925,11 @@ if __name__ == "__main__":
     labStartTime = 8          # time of morning that the lab starts operating (8.0 = 8:00 AM, 8.5 = 8:30 AM, etc)
     
     numCathRooms = 5            # number of Cath rooms available per day
-    numEPRooms = 3              # number of EP rooms available per day
+    numEPRooms = 4              # number of EP rooms available per day
+    numMiddleRooms = 2
     
     numRestrictedCath = 5       # default to no reserved rooms for emergencies
-    numRestrictedEP = 3         # default to no reserved rooms for emergencies
+    numRestrictedEP = 4         # default to no reserved rooms for emergencies
     restrictWeeks = True        # whether or not to restrict the same week procedures to the number of restricted rooms
     restrictDays = True         # whether or not to restrict the same day procedures to the number of restricted rooms
     restrictEmergencies = False # whether or not to restrict the emergency procedures to the number of restricted rooms
@@ -893,8 +950,12 @@ if __name__ == "__main__":
 
 
     # UNCOMMENT the same day/same week policy you want to implement
-    #sameDaysOnly = True         # will schedule all procedures on the day they were historically scheduled
-    sameDaysOnly = False        # will shedule procedures based on their scheduling horizon
+    sameDaysOnly = True         # will schedule all procedures on the day they were historically scheduled
+    #sameDaysOnly = False        # will shedule procedures based on their scheduling horizon
+
+    # UNCOMMENT
+    emergencyFlex = True
+    #emergencyFlex = False
 
 
     # Information for holding bays
@@ -933,6 +994,7 @@ if __name__ == "__main__":
 
     cathID = 0.0
     epID = 1.0
+    middleID = 2.0
     
     daysInPeriod = 125          # integer: Number of days in period
     
@@ -943,8 +1005,8 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathFlatEPFlat.csv'
@@ -978,7 +1040,7 @@ if __name__ == "__main__":
     procedures = cleanProcTimes(procedures)
     
     ###### model time period / pack bins ######
-    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numRestrictedCath,numRestrictedEP,labStartTime)
+    timePeriod = TimePeriod(daysInPeriod,numCathRooms,numEPRooms,numMiddleRooms,numRestrictedCath,numRestrictedEP,labStartTime)
     timePeriod.packBins(procedures,crossoverType,weekPairs,dayPairs)
 
     printOutputStatistics(timePeriod)
