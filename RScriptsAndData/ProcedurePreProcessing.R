@@ -19,7 +19,7 @@ efficient scheduling for the combined labs.
 Note: Drops all non-primetime procedures
 """
 
-setwd("/Users/dscheink/Documents/MIT-MGH/EP_Cath/R_PythonAnalysis/Joint Unit Model/ReModifiedAlgorithm")
+setwd("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/RScriptsAndData")
 
 ################### CATH ######################
 
@@ -69,45 +69,107 @@ EP$CaseEnd = as.POSIXlt(paste(EP$EventDate, EP$ProcTimeCaseEnd, sep = " "),forma
 
 ############### Fill in estimate proc lengths for procedures that are missing time stamps
 
+
+# calculate case time for viable procedures CATH
+viableProcsCath = subset(Cath, !is.na(In.RoomT) & !is.na(Out.RoomT) & !is.na(Cath$In.LabT))
+viableProcsCath = subset(viableProcsCath, Out.RoomT > In.RoomT & In.RoomT >=In.LabT)
+viableProcsCath$RoomTime = difftime(viableProcsCath$Out.RoomT,viableProcsCath$In.RoomT, unit = "min")
+viableProcsCath$RoomTimeMinutes = as.numeric(viableProcsCath$RoomTime)
+#Add 35 for turnover time
+viableProcsCath$RoomTimePlusTOMinutes = viableProcsCath$RoomTimeMinutes + 
+  pmin(viableProcsCath$RoomTimeMinutes,rnorm(length(viableProcsCath$RoomTimeMinutes),35,5))
+#Calculate the pre room time
+viableProcsCath$PreProc = difftime(viableProcsCath$In.RoomT, viableProcsCath$In.LabT, unit= "min")
+# use for manipulations
+viableProcsCath$PreProcTime = as.numeric(viableProcsCath$PreProc)
+
+
+
+# isolate the non-viable procedures
+nonviableProcsCath = subset(Cath,   is.na(In.RoomT) | 
+                                    is.na(Out.RoomT) | 
+                                    is.na(In.LabT) | 
+                                    Out.RoomT < In.RoomT | 
+                                    In.RoomT < In.LabT
+                            )
+
+#For each of the non-viable procedures use the means of the corresponding times of the viable ones of that procedure
+nonviableProcsCath$RoomTime = 0
+nonviableProcsCath$RoomTimeMinutes = 0
+nonviableProcsCath$RoomTimePlusTOMinutes = 0
+nonviableProcsCath$PreProc = 0
+nonviableProcsCath$PreProcTime = 0
+
+
+
+SampleFunction = function(i =1, ColName = "RoomTime", MatchColumn = "Proc_Group", NonViableDF = nonviableProcsCath,ViableDF = viableProcsCath){
+  return(subset(ViableDF, Proc_Group == as.character(NonViableDF[i,MatchColumn]))[max(1,round(sum( ViableDF[ , MatchColumn] == NonViableDF[i,MatchColumn])*runif(1))),ColName])
+}
+
+for (i in 1:length(nonviableProcsCath[,1])){
+  nonviableProcsCath[i,"RoomTime"] = SampleFunction(i,"RoomTime", "Proc_Group", nonviableProcsCath,viableProcsCath)
+  nonviableProcsCath[i,"RoomTimeMinutes"] = SampleFunction(i,"RoomTimeMinutes", "Proc_Group", nonviableProcsCath,viableProcsCath)
+  nonviableProcsCath[i,"RoomTimePlusTOMinutes"] = SampleFunction(i,"RoomTimePlusTOMinutes", "Proc_Group", nonviableProcsCath,viableProcsCath)
+  nonviableProcsCath[i,"PreProc"] = SampleFunction(i,"PreProc", "Proc_Group", nonviableProcsCath,viableProcsCath)
+  nonviableProcsCath[i,"PreProcTime"] = SampleFunction(i,"PreProcTime", "Proc_Group", nonviableProcsCath,viableProcsCath)
+}
+
+
 ############## In room time calculations for MiddleRoom ############## 
 
-# calculate case time for viable procedures
+# calculate case time for viable procedures in EP
 viableProcsEP = subset(EP, !is.na(CaseStart) & !is.na(CaseEnd))
-viableProcsEP = subset(viableProcsEP, viableProcsEP$CaseEnd > viableProcsEP$CaseStart)
+viableProcsEP = subset(viableProcsEP, CaseEnd > CaseStart)
 viableProcsEP$CaseTime = difftime(viableProcsEP$CaseEnd,viableProcsEP$CaseStart, unit = "min")
 viableProcsEP$CaseTimeMinutes = as.numeric(viableProcsEP$CaseTime)
+# isolate the non-viable procedures
+nonViableProcsEP = subset(EP,(is.na(CaseStart) | is.na(CaseEnd) | CaseEnd < CaseStart))
 
-#Add turnover time to non MiddleRoom procedures
-viableProcsEP$RoomTimePlusTOMinutes = 0
+#############Add turnover time to procedures that have time stamps
+
+## Non MiddleRoom procedures first
+viableProcsEP$RoomTimePlusTOMinutes = 0 
 NonMR = !(viableProcsEP$ProcedureRoom %in% "Middle Room")
 viableProcsEP$RoomTimePlusTOMinutes[NonMR] = viableProcsEP$CaseTimeMinutes[NonMR] + pmin(viableProcsEP$CaseTimeMinutes[NonMR],rnorm(sum(NonMR),85,10))
+viableProcsEP$RoomTimePlusTOMinutes[!NonMR] = viableProcsEP$CaseTimeMinutes[!NonMR]
 
 #Count the number of procedures not in the middle room that are missing time stamps
 length(subset(EP,!(ProcedureRoom %in% "Middle Room"), )[,1]) - 
   length(subset(EP, !is.na(CaseStart) & !is.na(CaseEnd) & !(ProcedureRoom %in% "Middle Room"), )[,1])
 
+#Look at the procedure mix for procedures with missing time stamps
+View(table(as.character(nonViableProcsEP$ProcedureTypeOfStudy)))
+View(table(as.character(viableProcsEP$ProcedureTypeOfStudy)))
 
-#Count the number of procedures in the middle room that are missing time stamps
-length(subset(EP,(ProcedureRoom %in% "Middle Room"), )[,1]) - 
-  length(subset(EP, !is.na(CaseStart) & !is.na(CaseEnd) & (ProcedureRoom %in% "Middle Room"), )[,1])
+#Add times to the procedures that don't have them from the procedures that do have them
+SampleFunction2 = function(i =1, ColName = "RoomTime", MatchColumn = "ProcedureTypeOfStudy", NonViableDF = nonViableProcsEP,ViableDF = viableProcsEP){
+  return(subset(ViableDF, ProcedureTypeOfStudy == as.character(NonViableDF[i,MatchColumn]))[max(1,round(sum( ViableDF[ , MatchColumn] == NonViableDF[i,MatchColumn])*runif(1))),ColName])
+}
+
+nonViableProcsEP$CaseTime = 0
+nonViableProcsEP$CaseTimeMinutes = 0
+nonViableProcsEP$RoomTimePlusTOMinutes = 0
+for (i in 1:length(nonViableProcsEP[,1])){
+  nonViableProcsEP[i,"CaseTime"] = SampleFunction2(i,"CaseTime", "ProcedureTypeOfStudy", nonViableProcsEP,viableProcsEP)
+  nonViableProcsEP[i,"CaseTimeMinutes"] = SampleFunction2(i,"CaseTimeMinutes", "ProcedureTypeOfStudy", nonViableProcsEP,viableProcsEP)
+  nonViableProcsEP[i,"RoomTimePlusTOMinutes"] = SampleFunction2(i,"RoomTimePlusTOMinutes", "ProcedureTypeOfStudy", nonViableProcsEP,viableProcsEP)
+}
+
+#Drop the unlabeled non-viable procedure
+nonViableProcsEP=subset(nonViableProcsEP, !ProcedureTypeOfStudy == "")
 
 
-viableCardioversions = subset(viableProcs, ProcedureTypeOfStudy=='cardioversion')
-viableCardioversions = viableCardioversions[viableCardioversions$CaseTimeMinutes<120,]
-viableTiltTableTests = subset(viableProcs, ProcedureTypeOfStudy=='tilt table test')
+################ Merge the procedures################
 
-# use these distributions to fill in missing case time information
-subsetCardioversion = (MR.Period$ProcedureTypeOfStudy=='cardioversion' & (is.na(MR.Period$CaseStart) | is.na(MR.Period$CaseEnd)))
-subsetCardioversion[is.na(subsetCardioversion)] = FALSE
-subsetTiltTable = MR.Period$ProcedureTypeOfStudy=='tilt table test' & (is.na(MR.Period$CaseStart) | is.na(MR.Period$CaseEnd))
-subsetTiltTable[is.na(subsetTiltTable)] = FALSE
-MR.Period$CaseTimeMinutes[subsetCardioversion] = rlnorm(sum(subsetCardioversion),3.227434,0.7224102)
-MR.Period$CaseTimeMinutes[subsetTiltTable] = rnorm(sum(subsetTiltTable),120,5)
-MR.Period$RoomTimePlusTOMinutes = MR.Period$CaseTimeMinutes + pmin(MR.Period$CaseTimeMinutes,rnorm(length(MR.Period$CaseTimeMinutes),85,10))
+CathOld = Cath
+EPOld = EP
 
 
+Cath = rbind(viableProcsCath,nonviableProcsCath)
+EP = rbind(viableProcsEP, nonViableProcsEP)
 
-################ CATH IN ROOM AND PRE ROOM TIME CALCULATION ################
+
+################ CATH EARLY AND LATE PROCEDURES ################
 
 Cath$WeekDay = weekdays(Cath$Date)
 # lose pieces of a factor = convert to character
@@ -115,17 +177,7 @@ Cath$Date_of_Cath = as.character(Cath$Date_of_Cath)
 Cath = Cath[Cath$WeekDay != "Saturday" & Cath$WeekDay != "Sunday",]
 Cath$Room = as.character(Cath$Room)
 
-#Calculate the in room time
-Cath$RoomTime = difftime(Cath$Out.RoomT, Cath$In.RoomT, unit= "min")
-# use for manipulations
-Cath$RoomTimeMinutes = as.numeric(Cath$RoomTime)
-#Add 35 for turnover time
-Cath$RoomTimePlusTOMinutes = Cath$RoomTimeMinutes + pmin(Cath$RoomTimeMinutes,rnorm(length(Cath$RoomTimeMinutes),35,5))
 
-#Calculate the pre room time
-Cath$PreProc = difftime(Cath$In.RoomT, Cath$In.LabT, unit= "min")
-# use for manipulations
-Cath$PreProcTime = as.numeric(Cath$PreProc)
 
 #Mark those procedures that started outside the 8am-6pm prime time hours and mark emergency procedures
 Cath$Pre8AMStartFlag = (Cath$Date8am > Cath$In.RoomT)
@@ -135,31 +187,19 @@ Cath$EmergencyFlag = (Cath$Origin=="Emergency Room"
                       | Cath$Origin=="Transfer"
                       | Cath$Origin=="Transfer>>Emergent")
 #Mark those procedures that happened entirely outside primetime
-Cath$NonPrimetime = 0
-Cath$NonPrimetime[(Cath$Pre8AMStartFlag & Cath$Out.RoomT<Cath$Date8am)] = 1
-Cath$NonPrimetime[(Cath$Post6PMEndFlag & Cath$In.RoomT>Cath$Date6pm)] = 1
+Cath$NonPrimetime = FALSE
+Cath$NonPrimetime[(Cath$Pre8AMStartFlag & Cath$Out.RoomT<Cath$Date8am)] = TRUE
+Cath$NonPrimetime[(Cath$Post6PMEndFlag & Cath$In.RoomT>Cath$Date6pm)] = TRUE
 table(Cath$NonPrimetime)
 sum(Cath$RoomTimePlusTOMinutes[Cath$NonPrimetime & Cath$Date=='2014-05-01'])
 
 Cath = subset(Cath,!NonPrimetime)
 Cath$NonPrimetime = NULL
 
-################ EP IN ROOM TIME CALCULATION ################
-
-EP$WeekDay = weekdays(EP$Date)
-#EP$Date_of_EP = as.character(EP$Date_of_EP)
-
-#Calculate the case time
-EP$CaseTime = difftime(EP$CaseEnd,EP$CaseStart, unit = "min")
-EP$CaseTimeMinutes = as.numeric(EP$CaseTime)
-EP$RoomTimePlusTOMinutes = EP$CaseTimeMinutes + pmin(EP$CaseTimeMinutes,rnorm(length(EP$CaseTimeMinutes),85,10))
-
-
-
-
+########Not relevant for EP#############
 #Mark those procedures that started outside the 8am-6pm prime time hours and mark emergency procedures
-EP$Pre8AMStartFlag = (EP$Date8am > EP$CaseStart)
-EP$Post6PMEndFlag = (EP$Date6pm < EP$CaseEnd)
+#EP$Pre8AMStartFlag = (EP$Date8am > EP$CaseStart)
+#EP$Post6PMEndFlag = (EP$Date6pm < EP$CaseEnd)
 
 
 
@@ -218,6 +258,7 @@ Devices = as.character(EP.Period$ProcCat[ grepl("ICD", EP.Period$ProcCat) |
                                             grepl("pacemaker", EP.Period$ProcCat)])
 EP.Period$PossibleRooms = 1
 EP.Period$PossibleRooms[EP.Period$ProcCat %in% unique(Devices)] = 2
+EP.Period$PossibleRooms[EP.Period$ProcedureRoom =="Middle Room" ] = 3
 
 #Only allow Temp Wires and 
 Cath.Period$PossibleRooms = 0
@@ -228,33 +269,45 @@ Cath.Period$PossibleRooms[Cath.Period$ProcCat %in% unique(CathTemp)] = 2
 
 
 ######Add pre and post procedures times
-
-CathBay = Cath.Period[,c("Origin", "Destination", "ProcCat2", "SS_Event_Cath_ID")] 
-CathBay$PreProcTime = 1
-CathBay$PostProcTime = 2
-PCIs = read.csv("JanSep14PCIs.csv")
-
-CathBayDetail = merge(x=CathBay, y=PCIs, by = "SS_Event_Cath_ID", all.x=TRUE)
-
 #Catagorize the patient post-proc times in Excel and format the data to merge with the data set
 CathBays =read.csv("CathRecoveryBayCatagories.csv")
 EPBays = read.csv("EPRecoveryBayCatagories.csv")
 
 #Merge this data with the existing DBs
-Cath.Period = merge(Cath.Period, CathBays, by = "SS_Event_Cath_ID")
-EP.Period = merge(EP.Period, EPBays, by = "ProcCat")
+Cath.Period = merge(Cath.Period, CathBays, by = "SS_Event_Cath_ID", all.x=TRUE)
+EP.Period = merge(EP.Period, EPBays, by = "ProcCat", all.x = TRUE)
+
+
+#########The following was done once to create the CathBays and EPBays files
+
+#CathBay = Cath.Period[,c("Origin", "Destination", "ProcCat2", "SS_Event_Cath_ID")] 
+#CathBay$PreProcTime = 1
+#CathBay$PostProcTime = 2
+#PCIs = read.csv("JanSep14PCIs.csv")
+#CathBayDetail = merge(x=CathBay, y=PCIs, by = "SS_Event_Cath_ID", all.x=TRUE)
+
+
 
 ###############Set pre-proc times
 
 
+#For procedures with no pre-proc time, we sampled from the distribution of pre-proc times for the same procedure
+#Cath.Period$PreProcTime = Cath.Period$PreProcTime
 
-#For procedures with no pre-proc time, sample from the distribution of pre-proc times for the same procedure
-
-EP.Period$PreProcTime = 1
+#For EP we generate random normal data with mean 1 hour and SD 5 minutes
+EP.Period$PreProcTime = 0
+EP.Period$PreProcTime = rnorm(length(EP.Period$PreProcTime),1,1/12)
 
 #Set default post-proc times to be modified based on catagories
 Cath.Period$PostProcTime = 2
 EP.Period$PostProcTime = 2
+
+#For the uncatagorized procedures, sample from the catagorized ones.
+Cath.Period$PostProcCat = as.character(Cath.Period$PostProcCat)
+for (i in 1:sum(is.na(Cath.Period$PostProcCat))){
+  Cath.Period$PostProcCat[is.na(Cath.Period$PostProcCat)][i] = SampleFunction(i,"PostProcCat", "Proc_Group", subset(Cath.Period,is.na(PostProcCat)),subset(Cath.Period,!is.na(PostProcCat)))
+}
+Cath.Period$PostProcCat[is.na(Cath.Period$PostProcCat)] = "Cat1"
 
 #Modify for Cath using the catagories and data from the Excel sheet titled CathPostProcCatagories.xlsx
 #Introduce a column called Random Number to randomize between procedures 
@@ -289,6 +342,12 @@ Cath.Period$PostProcTime[PtSubset] =  rnorm(sum(PtSubset),1,1/8)
 
 Cath.Period$PostProcTime[Cath.Period$PostProcCat == "Cat7"] = 8*runif(sum(Cath.Period$PostProcCat == "Cat7"))
 
+
+
+#First add 0 post proc time to Middle Room procedures
+EP.Period$PostProcCat = as.character(EP.Period$PostProcCat)
+EP.Period$PostProcCat[is.na(EP.Period$PostProcCat)] = "MR"
+EP.Period$PostProcTime[EP.Period$PostProcCat == "MR"] = 0
 #Modify for EP using the catagories and data from the Excel sheet titled
 EP.Period$PostProcTime[EP.Period$PostProcCat == "Cat1"] = rnorm(sum(EP.Period$PostProcCat == "Cat1"), 1.5, 1/8)
 EP.Period$PostProcTime[EP.Period$PostProcCat == "Cat2"] = 4+2*runif(sum(EP.Period$PostProcCat == "Cat2"))
@@ -307,6 +366,9 @@ write.csv(EP.Period, "AllEPDataRestricted.csv")
 
 
 # extract relevant information and merge lab info
+Cath.Period$SS_Event_ID = Cath.Period$SS_Event_Cath_ID
+EP.Period$SS_Event_ID = EP.Period$SS_Event_EP_ID
+
 Cath2 = Cath.Period[,c("DayOfPeriod","WeekOfPeriod", "Lab", "RoomTimePlusTOMinutes", "ScheduleHorizon",
                        "PossibleRooms", "PreProcTime", "PostProcTime","ProcCat", "Attending", "PostProcCat", "SS_Event_ID") ]
 EP2 = EP.Period[,c("DayOfPeriod","WeekOfPeriod", "Lab", "RoomTimePlusTOMinutes", "ScheduleHorizon",
@@ -325,12 +387,234 @@ CATHandEP = merge(CATHandEP,Attendings,"Attending")
 CATHandEP = subset(CATHandEP,!is.na(RoomTimePlusTOMinutes))
 write.csv(CATHandEP, "CathAndEPFull.csv")
 
+#Will write files after volume changes are complete
 #Remove the columns that won't be used for the Python script
-CATH.EP.ForPython = CATHandEP[,c("DayOfPeriod","WeekOfPeriod", "Lab", "RoomTimePlusTOMinutes", "ScheduleHorizon",
+#CATH.EP.ForPython = CATHandEP[,c("DayOfPeriod","WeekOfPeriod", "Lab", "RoomTimePlusTOMinutes", "ScheduleHorizon",
                                  "PossibleRooms", "PreProcTime", "PostProcTime","ProcKey", "AttendingKey")]
 
-write.table(CATH.EP.ForPython, file='CathAndEP_Oct15.csv', row.names=FALSE, col.names=FALSE,sep=",")
 
+
+#write.table(CATH.EP.ForPython, file='CathAndEP_Oct15.csv', row.names=FALSE, col.names=FALSE,sep=",")
+
+
+###################Incorporate Volume Changes#################
+
+DF = read.csv("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Raw Data/CathProcs03_14.csv")
+CathSep = read.csv("JanSep14CathTimes.csv")
+CathProcInfo = read.csv("JanJun14CathProcs.csv")
+
+DF$Year = format(as.POSIXct(DF$Date_of_Cath, format="%m/%d/%y"),"%Y")
+DF$Month = format(as.POSIXct(DF$Date_of_Cath, format="%m/%d/%y"),"%m")
+
+#Example of calculation for 2013 monthly volume
+CY2013 = DF[DF$Year == "2013",]
+ProcsByMonth13 = as.data.frame.matrix(table(CY2013$Proc_Group, CY2013$Month))
+ProcsByMonth13 = rbind(ProcsByMonth13,colSums(ProcsByMonth13))
+row.names(ProcsByMonth13)[19] = "Total"
+
+#Calculate data for all years
+ProcsByYear = as.data.frame.matrix(table(DF$Proc_Group, DF$Year))
+CathSep14 = as.data.frame(table(CathSep$Proc_Group))
+ProcsByYear14 = cbind(ProcsByYear[c(1:9,11:14,16:18),1:14],CathSep14)
+ProcsByYear14$Var1 = NULL
+colnames(ProcsByYear14)[15]="JanSep2014"
+ProcsByYear14$Estimate2014 = 4/3*ProcsByYear14$JanSep2014
+
+
+write.csv(ProcsByYear14, "CathProcsYearly.csv")
+
+write.csv(ProcsByYear, "CathProcsByYear.csv")
+
+#Run a regression for each row and add the regression variable to the end of the DF for the years 2010-2014
+
+data = ProcsByYear14
+design.mat <- cbind(1,1:5)
+response.mat <- t(data[,c(11:14,16)])
+
+reg <- lm.fit(design.mat, response.mat)$coefficients
+data <- cbind(data, t(reg))
+colnames(data)[17:18]=c("intercept", "slope")
+data$ChangeAsPercentageOf2014Estimate = data$slope/data$Estimate2014*100
+data$ChangeNormalized = data$ChangeAsPercentageOf2014Estimate/abs(sum(data$ChangeAsPercentageOf2014Estimate[1:16]))
+data = rbind(data,colSums(data))
+row.names(data)[17] = "Total"
+
+
+
+########## Use the trends in Cath volume to make various projections of volume growth
+
+# Read in the relevant information
+Volumes = read.csv("CathAndEPFull.csv")
+#write.csv(Volumes, "CathAndEPProcSummaryRestricted.csv")
+
+#Look at the overall case mix. Drop the procedures that were aborted
+Volumes = subset(Volumes, ProcCat != "Case Aborted")
+Volumes = subset(Volumes, ProcCat != "Aborted")
+
+##########Based on the analysis above, we model various levels of growth and decline in each type of Cath procedure.###########
+
+#This column of random numbers will let us add and remove procedures
+Volumes$RandomNumber = 100*runif(length(Volumes[,1]))
+Volumes$ID = 1:length(Volumes[,1])
+
+###Subset the Cath data into growth and decline
+Growth = subset(data, slope>0)
+Decline = subset(data, slope<0)
+
+###Make a vector to drop the appropriate percentage of each procedures for which the change is negative
+#Set the number of total procedures to drop per year
+#The default drop is 200 procedures for one year. This will correspond to about 100 procedures for the 6 month period considered
+
+CathDrop = function(DF= Volumes, Growth = Growth, Decline = Decline, TotalDropPerYear = 200){
+  
+  DropList = list()
+  for (i in 1:length(Decline[,1])){
+    DropSubset = subset(Volumes, Volumes$ProcCat == row.names(Decline)[i])
+    DropList[[i]] = DropSubset$ID[DropSubset$RandomNumber> 100 + (TotalDropPerYear/2)*Decline$ChangeNormalized[i]]
+  }
+  
+  DropID = unlist(DropList)
+  
+  ###Make a vector to add the appropriate percentage of each procedures for which the change is positive
+  
+  AddList = list()
+  for (i in 1:length(Growth[,1])){
+    AddSubset = subset(Volumes, Volumes$ProcCat == row.names(Growth)[i])
+    AddList[[i]] = AddSubset$ID[AddSubset$RandomNumber> 100 - (TotalDropPerYear/2)*Growth$ChangeNormalized[i]]
+  }
+  
+  AddID = unlist(AddList)
+  
+  #Cheack that this gives the desired total net change
+  length(DropID) - length(AddID)
+  
+  VolumesCathDecrease = subset(Volumes, !(ID %in% DropID))
+  
+  #Add the selected procedures
+  AddProcs = Volumes[Volumes$ID %in% AddID,]
+  if (length(AddProcs[,1])>0){
+    AddProcs$ScheduleHorizon = 3
+  }
+  
+  CathDecreaseIncrease = rbind(VolumesCathDecrease, AddProcs)
+  
+  #Change the schedule horizon of the added procedures so that they can be performed at any time in a given week
+  
+  
+  return(CathDecreaseIncrease)
+}
+
+
+##########Based on potential for EP growth, model one and two more additional providers such as Heist Edwin K, MD, Phd########
+
+View(table(as.character(Volumes$Attending[Volumes$Lab == "1"])))
+
+View(table(as.character(Volumes$ProcCat[Volumes$Lab==1 & Volumes$Attending=="Heist Edwin K, MD, Phd"])))
+
+AddEPProvider = function(Volumes = CathVolChange0, NumProviders = 1){
+  
+  ExtraProvider = subset(Volumes, Attending=="Heist Edwin K, MD, Phd")
+  ExtraProvider$ScheduleHorizon = 3
+  
+  ExtraProvider$Attending = "New EP Provider 1"
+  ExtraProvider$AttendingKey = max(ExtraProvider$AttendingKey)+1
+  
+  ExtraProvider2 = ExtraProvider
+  ExtraProvider2$Attending = "New EP Provider 2"
+  ExtraProvider2$AttendingKey = max(ExtraProvider2$AttendingKey)+1
+  
+  VolumeEPIncrease = rbind(Volumes, ExtraProvider)  
+  
+  if (NumProviders == 2){
+    VolumeEPIncrease = rbind(VolumeEPIncrease, ExtraProvider2)
+  }
+  
+  return(VolumeEPIncrease)
+  
+}
+
+##########Based on potential for EP growth, model one and two more additional providers such as Moussa########
+
+
+##########Combine the Cath volume drops and EP voluem growth
+
+
+CathVolChange0 = CathDrop(DF= Volumes, Growth = Growth, Decline = Decline, TotalDropPerYear = 0)
+CathVolChange1 = CathDrop(DF= Volumes, Growth = Growth, Decline = Decline, TotalDropPerYear = 200)
+CathVolChange2 = CathDrop(DF= Volumes, Growth = Growth, Decline = Decline, TotalDropPerYear = 400)
+
+CathFlatEPFlat = CathVolChange0
+CathFlatEPGrow1 = AddEPProvider(Volumes = CathVolChange0, NumProviders = 1)
+CathFlatEPGrow2 = AddEPProvider(Volumes = CathVolChange0, NumProviders = 2)
+
+CathDrop1EPFlat = CathVolChange1
+CathDrop1EPGrow1 = AddEPProvider(Volumes = CathVolChange1, NumProviders = 1)
+CathDrop1EPGrow2 = AddEPProvider(Volumes = CathVolChange1, NumProviders = 2)
+
+CathDrop2EPFlat = CathVolChange2
+CathDrop2EPGrow1 = AddEPProvider(Volumes = CathVolChange2, NumProviders = 1)
+CathDrop2EPGrow2 = AddEPProvider(Volumes = CathVolChange2, NumProviders = 2)
+
+#Remove the columns that won't be used for the Python script
+ForPython = function(df){
+  
+  return( df[,c("DayOfPeriod","WeekOfPeriod", "Lab", "RoomTimePlusTOMinutes", "ScheduleHorizon",
+                "PossibleRooms", "PreProcTime", "PostProcTime","ProcKey", "AttendingKey")])
+}
+
+
+OutputDir='/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/InputData/'
+
+write.table(ForPython(CathFlatEPFlat), file=paste(OutputDir,'CathFlatEPFlatV2.csv',sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+write.table(ForPython(CathFlatEPGrow1), file=paste(OutputDir,'CathFlatEPGrow1V2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+write.table(ForPython(CathFlatEPGrow2), file=paste(OutputDir,'CathFlatEPGrow2V2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+
+write.table(ForPython(CathDrop1EPFlat), file=paste(OutputDir,'CathDrop1EPFlatV2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+write.table(ForPython(CathDrop1EPGrow1), file=paste(OutputDir,'CathDrop1EPGrow1V2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+write.table(ForPython(CathDrop1EPGrow2), file=paste(OutputDir,'CathDrop1EPGrow2V2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+
+write.table(ForPython(CathDrop2EPFlat), file=paste(OutputDir,'CathDrop2EPFlatV2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+write.table(ForPython(CathDrop2EPGrow1), file=paste(OutputDir,'CathDrop2EPGrow1V2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+write.table(ForPython(CathDrop2EPGrow2), file=paste(OutputDir,'CathDrop2EPGrow2V2.csv', sep=""), row.names=FALSE, col.names=FALSE,sep=",")
+
+VolStats = 
+  data.frame(rbind(summary(CathFlatEPFlat$RoomTimePlusTOMinutes),
+                   summary(CathFlatEPGrow1$RoomTimePlusTOMinutes),
+                   summary(CathFlatEPGrow2$RoomTimePlusTOMinutes),
+                   summary(CathDrop1EPFlat$RoomTimePlusTOMinutes),
+                   summary(CathDrop1EPGrow1$RoomTimePlusTOMinutes),
+                   summary(CathDrop1EPGrow2$RoomTimePlusTOMinutes),
+                   summary(CathDrop2EPFlat$RoomTimePlusTOMinutes),
+                   summary(CathDrop2EPGrow1$RoomTimePlusTOMinutes),
+                   summary(CathDrop2EPGrow2$RoomTimePlusTOMinutes)
+  ))
+
+CathFlatEPFlat$Scenario = "CathFlatEPFlat"
+CathFlatEPGrow1$Scenario = "CathFlatEPGrow1"
+CathFlatEPGrow2$Scenario = "CathFlatEPGrow2"
+CathDrop1EPFlat$Scenario = "CathDrop1EPFlat"
+CathDrop1EPGrow1$Scenario = "CathDrop1EPGrow1"
+CathDrop1EPGrow2$Scenario = "CathDrop1EPGrow2"
+CathDrop2EPFlat$Scenario = "CathDrop2EPFlat"
+CathDrop2EPGrow1$Scenario = "CathDrop2EPGrow1"
+CathDrop2EPGrow2$Scenario = "CathDrop2EPGrow2"
+
+AllScenarios = rbind(
+  CathFlatEPFlat, 
+  CathFlatEPGrow1, 
+  CathFlatEPGrow2, 
+  CathDrop1EPFlat, 
+  CathDrop1EPGrow1, 
+  CathDrop1EPGrow2, 
+  CathDrop2EPFlat,
+  CathDrop2EPGrow1,
+  CathDrop2EPGrow2)
+
+DT = as.data.table(AllScenarios)
+
+Scenarios = as.data.frame(DT[, list(length(RoomTimePlusTOMinutes), mean(RoomTimePlusTOMinutes), median(RoomTimePlusTOMinutes) ), by = Scenario])
+
+write.csv(Scenarios, "CathEPVolumeScenarios.csv")
 
 
 
