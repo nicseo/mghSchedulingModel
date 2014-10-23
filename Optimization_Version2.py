@@ -142,6 +142,17 @@ class TimePeriod:
             for proc in allProcs:
                 postTime = random.gauss(desiredMean, desiredStDev)
                 proc[iPostTime] = postTime
+                
+        if ConvertPreProcToHours:
+            # Convert the pre procedure time to hours and then cap it to be be no more than 3 hours
+            for proc in allProcs:
+                proc[iPreTime] = proc[iPreTime]/60
+                
+        if CapHBPreProc:
+            # Cap the pre procedure time to be be no more than 3 hours
+            for proc in allProcs:
+                PreTime = min(proc[iPreTime],HBPreProcCap)
+                proc[iPreTime] = PreTime
 
         # break procedures up by scheduling horizon
         emergencies = [x for x in allProcs if x[iSchedHorizon]==1.0]
@@ -850,7 +861,9 @@ def printOutputStatistics(timePeriod):
     print "Pair days for scheduling? "+str(dayPairs)
     print "Schedule all procedures on same day as historically? "+str(sameDaysOnly)
     print "Placement priority: "+str(priority)
-    print "Post procedure determination random? "+str(postProcRandom)+"\n"
+    print "Post procedure determination random? "+str(postProcRandom)
+    print "Pre procedure time converted to hours? "+str(ConvertPreProcToHours)
+    print "Pre procedure cap implemented? "+str(CapHBPreProc)+"\n"
 
     print "*********PROCEDURE DATA*********"
     print "Total procedures: "+str(timePeriod.numTotalProcs)
@@ -966,7 +979,15 @@ if __name__ == "__main__":
     #desiredStDev= 0.25          # in hours
     #Set the number of hours in the day after which the holding bays should close:
     HBCloseTime = 30            #Default is 24
-
+    
+    #Conver pre proc time to hours
+    #ConvertPreProcToHours = False
+    ConvertPreProcToHours = True
+    #Cap the amount of time a patient can spend in a pre-procedure room
+    #CapHBPreProc = False
+    CapHBPreProc = True
+    HBPreProcCap = 3    
+    
     # SPECIFY the resolution for holding bay times
     resolution = 15.0           # in minutes
 
@@ -1005,13 +1026,13 @@ if __name__ == "__main__":
     ###### information regarding the name/location of the data file ######
 
     # UNCOMMENT the working directory, or add a new one
-    os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
-    #os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
+    #os.chdir("/Users/nicseo/Desktop/MIT/Junior/Fall/UROP/Scheduling Optimization/Script")
+    os.chdir("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/")
     
     # UNCOMMENT the data set to analyze, or add a new one
     #fileName= 'InputData/CathFlatEPFlat.csv'
     #fileName= 'InputData/CathFlatEPGrow1.csv'
-    fileName= 'InputData/CathFlatEPGrow2.csv'
+    fileName= 'InputData/CathFlatEPGrow2V2.csv'
     #fileName= 'InputData/CathDrop1EPFlat.csv'
     #fileName= 'InputData/CathDrop1EPGrow1.csv'
     #fileName= 'InputData/CathDrop1EPGrow2.csv'
