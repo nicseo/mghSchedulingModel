@@ -615,6 +615,3 @@ DT = as.data.table(AllScenarios)
 Scenarios = as.data.frame(DT[, list(length(RoomTimePlusTOMinutes), mean(RoomTimePlusTOMinutes), median(RoomTimePlusTOMinutes) ), by = Scenario])
 
 write.csv(Scenarios, "CathEPVolumeScenarios.csv")
-
-
-

@@ -1,4 +1,4 @@
-HoldingBay = read.csv("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/holdingBay.csv")
+HoldingBay = read.csv("/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/OutputData/holdingBaysV2.csv")
 
 Resolution = 15
 
@@ -35,7 +35,7 @@ plot(1:NumberOfTimeSlots, HB$Quantile95, main = "Q95 Cath and EP recovery bay us
 plot(1:NumberOfTimeSlots, HB$max, main = "Max Cath and EP recovery bay use
       (Pre - 1 hour, Post - Varies)")
 
-write.csv(t(HB), "HoldingBayOccupancy.csv")
+write.csv(t(HB), "/Users/dscheink/Documents/MIT-MGH/EP_Cath/Git/mghSchedulingModel/R Processed Output Data/HoldingBayOccupancy.csv")
 
 
 #Number of days with occupancy over 19 bays:
